@@ -74,16 +74,17 @@ export const useWallet = () => {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && typeof window.ethereum !== 'undefined') {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
+      const handleAccountsChanged = (accounts: unknown) => {
+        const accountsArray = accounts as string[];
+        if (accountsArray.length === 0) {
           disconnectWallet();
         } else {
-          setAccount(accounts[0]);
+          setAccount(accountsArray[0]);
         }
       };
 
-      const handleChainChanged = (chainId: string) => {
-        setChainId(parseInt(chainId, 16));
+      const handleChainChanged = (chainId: unknown) => {
+        setChainId(parseInt(chainId as string, 16));
       };
 
       window.ethereum.on('accountsChanged', handleAccountsChanged);

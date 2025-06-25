@@ -119,7 +119,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
             {timeframeOptions.map(option => (
               <button
                 key={option.value}
-                onClick={() => setSelectedTimeframe(option.value as any)}
+                onClick={() => setSelectedTimeframe(option.value as '7d' | '30d' | '90d' | '1y')}
                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                   selectedTimeframe === option.value
                     ? 'bg-blue-600 text-white'

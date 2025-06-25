@@ -1,8 +1,17 @@
 import { getChainById } from '@/config/chains';
 
-export interface AlchemyTokenBalance {
+interface AlchemyTokenBalance {
   contractAddress: string;
   tokenBalance: string;
+}
+
+export interface TokenBalance {
+  contractAddress: string;
+  tokenBalance: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logo?: string;
 }
 
 export interface TokenPrice {
