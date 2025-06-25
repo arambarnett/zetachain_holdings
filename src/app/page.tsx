@@ -166,6 +166,36 @@ export default function Holdings() {
     { value: 'name-desc', label: '🔤 Name (Z to A)', icon: '🔤' },
   ];
 
+  const getActiveNetworkClass = (chainId: number) => {
+    switch (chainId) {
+      case 1: // Ethereum Mainnet
+        return 'bg-blue-500 text-white border-transparent shadow-lg transform scale-105';
+      case 11155111: // Ethereum Sepolia
+        return 'bg-purple-500 text-white border-transparent shadow-lg transform scale-105';
+      case 7000: // ZetaChain Mainnet
+        return 'bg-green-500 text-white border-transparent shadow-lg transform scale-105';
+      case 7001: // ZetaChain Athens
+        return 'bg-yellow-500 text-white border-transparent shadow-lg transform scale-105';
+      default:
+        return 'bg-gray-500 text-white border-transparent shadow-lg transform scale-105';
+    }
+  };
+
+  const getNetworkDotColor = (chainId: number) => {
+    switch (chainId) {
+      case 1: // Ethereum Mainnet
+        return 'bg-blue-500';
+      case 11155111: // Ethereum Sepolia
+        return 'bg-purple-500';
+      case 7000: // ZetaChain Mainnet
+        return 'bg-green-500';
+      case 7001: // ZetaChain Athens
+        return 'bg-yellow-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Navigation */}
@@ -393,14 +423,14 @@ export default function Holdings() {
                       onClick={() => switchChain(chain.id)}
                       className={`p-4 rounded-xl font-medium transition-all duration-200 border text-left ${
                         isActive
-                          ? `bg-gradient-to-r ${chain.gradient.from} ${chain.gradient.to} text-white border-transparent shadow-lg transform scale-105`
-                          : `bg-white/50 hover:bg-white border-gray-200 hover:shadow-md hover:border-gray-300 hover:${chain.color.bg} hover:${chain.color.text}`
+                          ? getActiveNetworkClass(chain.id)
+                          : `bg-white/50 hover:bg-white border-gray-200 hover:shadow-md hover:border-gray-300 hover:${chain.color.bg} hover:${chain.color.text} text-gray-900`
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
                           <div className={`w-3 h-3 rounded-full ${
-                            isActive ? 'bg-white' : `bg-gradient-to-r ${chain.gradient.from} ${chain.gradient.to}`
+                            isActive ? 'bg-white' : getNetworkDotColor(chain.id)
                           }`}></div>
                           <div>
                             <div className="flex items-center space-x-2">
