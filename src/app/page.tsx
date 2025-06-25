@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { getTokenBalances, getTokenPrices, TokenBalance } from '@/lib/alchemy';
-import { SUPPORTED_CHAINS, ALL_CHAINS, getChainById, getMainnetChains, getTestnetChains } from '@/config/chains';
+import { SUPPORTED_CHAINS, ALL_CHAINS, getChainById } from '@/config/chains';
 import { ethers } from 'ethers';
 import ChainManagement from '@/components/ChainManagement';
 import SearchModal from '@/components/SearchModal';

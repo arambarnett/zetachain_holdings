@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { SUPPORTED_CHAINS, type ChainConfig } from '@/config/chains';
+import { SUPPORTED_CHAINS } from '@/config/chains';
 
 export const useWallet = () => {
   const [account, setAccount] = useState<string | null>(null);
@@ -28,8 +28,8 @@ export const useWallet = () => {
         const network = await provider.getNetwork();
         setChainId(Number(network.chainId));
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect wallet');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
     } finally {
       setIsConnecting(false);
     }
@@ -46,8 +46,8 @@ export const useWallet = () => {
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
+    } catch (switchError: unknown) {
+      if (switchError && typeof switchError === 'object' && 'code' in switchError && switchError.code === 4902) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -59,7 +59,7 @@ export const useWallet = () => {
               nativeCurrency: targetChain.nativeCurrency,
             }],
           });
-        } catch (addError) {
+        } catch {
           setError('Failed to add network');
         }
       }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 
 interface TokenWithPrice {
   symbol: string;
@@ -48,7 +48,7 @@ const generateMockHistoricalData = (currentValue: number) => {
   return data;
 };
 
-const generateMockPerformanceMetrics = (historicalData: any[]) => {
+const generateMockPerformanceMetrics = (historicalData: { value: number }[]) => {
   if (historicalData.length < 2) return null;
   
   const startValue = historicalData[0].value;
@@ -107,7 +107,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
     }).format(value);
   };
   
-  const formatTooltipValue = (value: number) => [formatCurrency(value), 'Portfolio Value'];
+  const formatTooltipValue = (value: number): [string, string] => [formatCurrency(value), 'Portfolio Value'];
   
   return (
     <div className="space-y-8">

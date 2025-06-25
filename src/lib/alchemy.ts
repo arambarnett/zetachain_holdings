@@ -1,14 +1,8 @@
 import { getChainById } from '@/config/chains';
 
-const ALCHEMY_API_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || 'demo';
-
-export interface TokenBalance {
+export interface AlchemyTokenBalance {
   contractAddress: string;
   tokenBalance: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  logo?: string;
 }
 
 export interface TokenPrice {
@@ -89,11 +83,11 @@ export const getTokenBalances = async (address: string, chainId: number): Promis
         
         if (data.result?.tokenBalances) {
           const tokenBalances = data.result.tokenBalances.filter(
-            (token: any) => token.tokenBalance !== '0x0' && token.tokenBalance !== '0x'
+            (token: AlchemyTokenBalance) => token.tokenBalance !== '0x0' && token.tokenBalance !== '0x'
           );
 
           const tokenDetails = await Promise.all(
-            tokenBalances.map(async (token: any) => {
+            tokenBalances.map(async (token: AlchemyTokenBalance) => {
               try {
                 const metadataResponse = await fetch(alchemyUrl, {
                   method: 'POST',

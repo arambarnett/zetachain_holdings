@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getChainById, SUPPORTED_CHAINS } from '@/config/chains';
 import { getTokenBalances, getTokenPrices, type TokenBalance } from '@/lib/alchemy';
 import { ethers } from 'ethers';
@@ -8,7 +8,7 @@ import { ethers } from 'ethers';
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentChainId: number | null;
+  currentChainId?: number | null;
 }
 
 interface TokenWithPrice extends TokenBalance {
@@ -24,7 +24,7 @@ interface SearchResult {
   isValidAddress: boolean;
 }
 
-export default function SearchModal({ isOpen, onClose, currentChainId }: SearchModalProps) {
+export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -66,7 +66,6 @@ export default function SearchModal({ isOpen, onClose, currentChainId }: SearchM
 
     setIsSearching(true);
     setSearchError(null);
-    const results: SearchResult[] = [];
 
     try {
       // Search across all supported chains
