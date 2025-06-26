@@ -106,7 +106,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
   
   // Colors for the pie chart
   const COLORS = [
-    '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+    '#008462', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
     '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
   ];
   
@@ -131,7 +131,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
   return (
     <div className="space-y-8">
       {/* Performance Summary */}
-      <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-semibold text-gray-900">Portfolio Performance</h3>
           <div className="flex items-center space-x-2">
@@ -141,8 +141,8 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
                 onClick={() => setSelectedTimeframe(option.value as '7d' | '30d' | '90d' | '1y')}
                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                   selectedTimeframe === option.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? 'bg-zeta-500 text-white'
+                    : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                 }`}
               >
                 {option.label}
@@ -210,10 +210,10 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
               <Line 
                 type="monotone" 
                 dataKey="value" 
-                stroke="#3B82F6" 
+                stroke="#008462" 
                 strokeWidth={3}
                 dot={false}
-                activeDot={{ r: 6, fill: '#3B82F6' }}
+                activeDot={{ r: 6, fill: '#008462' }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -223,7 +223,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
       {/* Portfolio Allocation */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Pie Chart */}
-        <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">Portfolio Allocation</h3>
           
           {allocationData.length > 0 ? (
@@ -256,7 +256,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
         </div>
         
         {/* Asset Breakdown */}
-        <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">Asset Breakdown</h3>
           
           <div className="space-y-4">
@@ -287,7 +287,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
       
       {/* Token Performance Bar Chart */}
       {allocationData.length > 0 && (
-        <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">Token Values</h3>
           
           <div className="h-80">
@@ -320,7 +320,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
                     boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
                   }}
                 />
-                <Bar dataKey="value" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="value" fill="#008462" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -328,7 +328,7 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
       )}
       
       {/* Performance Insights */}
-      <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
         <h3 className="text-xl font-semibold text-gray-900 mb-4">Performance Insights</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
