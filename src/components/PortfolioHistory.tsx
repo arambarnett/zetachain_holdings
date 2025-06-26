@@ -15,19 +15,28 @@ interface PortfolioHistoryProps {
   totalValue: number;
 }
 
-// Mock historical data - in a real app, this would come from a database or API
-const generateMockHistoricalData = (currentValue: number) => {
+// Generate historical data based on selected timeframe
+const generateHistoricalData = (currentValue: number, timeframe: '7d' | '30d' | '90d' | '1y') => {
   const data = [];
   const now = new Date();
   
-  for (let i = 29; i >= 0; i--) {
+  const timeframeDays = {
+    '7d': 7,
+    '30d': 30,
+    '90d': 90,
+    '1y': 365
+  };
+  
+  const days = timeframeDays[timeframe];
+  
+  for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     
-    // Generate realistic portfolio fluctuations
+    // Generate realistic portfolio fluctuations based on timeframe
     const baseValue = currentValue;
-    const volatility = 0.15; // 15% volatility
-    const trend = Math.sin(i * 0.2) * 0.1; // Some trending component
+    const volatility = timeframe === '7d' ? 0.05 : timeframe === '30d' ? 0.15 : timeframe === '90d' ? 0.25 : 0.4;
+    const trend = Math.sin(i * 0.1) * 0.1;
     const random = (Math.random() - 0.5) * volatility;
     const multiplier = 1 + trend + random;
     
@@ -36,7 +45,9 @@ const generateMockHistoricalData = (currentValue: number) => {
     data.push({
       date: date.toISOString().split('T')[0],
       value: Math.round(value * 100) / 100,
-      formattedDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      formattedDate: timeframe === '1y' 
+        ? date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     });
   }
   
@@ -48,7 +59,7 @@ const generateMockHistoricalData = (currentValue: number) => {
   return data;
 };
 
-const generateMockPerformanceMetrics = (historicalData: { value: number }[]) => {
+const generatePerformanceMetrics = (historicalData: { value: number }[], timeframe: '7d' | '30d' | '90d' | '1y') => {
   if (historicalData.length < 2) return null;
   
   const startValue = historicalData[0].value;
@@ -61,19 +72,27 @@ const generateMockPerformanceMetrics = (historicalData: { value: number }[]) => 
   const highValue = Math.max(...values);
   const lowValue = Math.min(...values);
   
+  const timeframeLabel = {
+    '7d': '7D',
+    '30d': '30D',
+    '90d': '90D',
+    '1y': '1Y'
+  };
+  
   return {
-    thirtyDayChange: change,
-    thirtyDayChangePercent: changePercent,
-    thirtyDayHigh: highValue,
-    thirtyDayLow: lowValue
+    change: change,
+    changePercent: changePercent,
+    high: highValue,
+    low: lowValue,
+    label: timeframeLabel[timeframe]
   };
 };
 
 export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistoryProps) {
   const [selectedTimeframe, setSelectedTimeframe] = useState<'7d' | '30d' | '90d' | '1y'>('30d');
   
-  const historicalData = generateMockHistoricalData(totalValue);
-  const performanceMetrics = generateMockPerformanceMetrics(historicalData);
+  const historicalData = generateHistoricalData(totalValue, selectedTimeframe);
+  const performanceMetrics = generatePerformanceMetrics(historicalData, selectedTimeframe);
   
   // Generate allocation data for pie chart
   const allocationData = tokens
@@ -139,20 +158,20 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
               <div className="text-sm text-gray-500">Current Value</div>
             </div>
             <div className="text-center">
-              <div className={`text-2xl font-bold ${performanceMetrics.thirtyDayChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {performanceMetrics.thirtyDayChange >= 0 ? '+' : ''}{formatCurrency(performanceMetrics.thirtyDayChange)}
+              <div className={`text-2xl font-bold ${performanceMetrics.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {performanceMetrics.change >= 0 ? '+' : ''}{formatCurrency(performanceMetrics.change)}
               </div>
-              <div className="text-sm text-gray-500">30D Change</div>
+              <div className="text-sm text-gray-500">{performanceMetrics.label} Change</div>
             </div>
             <div className="text-center">
-              <div className={`text-2xl font-bold ${performanceMetrics.thirtyDayChangePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {performanceMetrics.thirtyDayChangePercent >= 0 ? '+' : ''}{performanceMetrics.thirtyDayChangePercent.toFixed(2)}%
+              <div className={`text-2xl font-bold ${performanceMetrics.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {performanceMetrics.changePercent >= 0 ? '+' : ''}{performanceMetrics.changePercent.toFixed(2)}%
               </div>
-              <div className="text-sm text-gray-500">30D Change %</div>
+              <div className="text-sm text-gray-500">{performanceMetrics.label} Change %</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{formatCurrency(performanceMetrics.thirtyDayHigh)}</div>
-              <div className="text-sm text-gray-500">30D High</div>
+              <div className="text-2xl font-bold text-gray-900">{formatCurrency(performanceMetrics.high)}</div>
+              <div className="text-sm text-gray-500">{performanceMetrics.label} High</div>
             </div>
           </div>
         )}
@@ -172,7 +191,11 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
                 stroke="#6b7280"
                 fontSize={12}
                 tickLine={false}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => {
+                  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                  if (value >= 1000) return `$${(value / 1000).toFixed(0)}k`;
+                  return `$${value.toFixed(0)}`;
+                }}
               />
               <Tooltip 
                 formatter={formatTooltipValue}
@@ -281,7 +304,11 @@ export default function PortfolioHistory({ tokens, totalValue }: PortfolioHistor
                   stroke="#6b7280"
                   fontSize={12}
                   tickLine={false}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                    if (value >= 1000) return `$${(value / 1000).toFixed(0)}k`;
+                    return `$${value.toFixed(0)}`;
+                  }}
                 />
                 <Tooltip 
                   formatter={formatTooltipValue}
