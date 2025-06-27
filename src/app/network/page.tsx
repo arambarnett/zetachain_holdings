@@ -10,12 +10,10 @@ import {
   GlobeAltIcon,
   CpuChipIcon,
   ClockIcon,
-  BoltIcon,
   ArrowTrendingUpIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   CurrencyDollarIcon,
-  UsersIcon,
   ArrowPathIcon,
   LinkIcon
 } from '@heroicons/react/24/outline'
@@ -39,6 +37,12 @@ export default function NetworkHealthPage() {
     totalTransactions: number
     totalAddresses: number
     avgTransactionFee: string
+    latestBlocks: Array<{
+      number: number
+      hash: string
+      transaction_count: number
+      gas_used: string
+    }>
   } | null>(null)
 
 
@@ -291,7 +295,7 @@ export default function NetworkHealthPage() {
                 </h3>
                 
                 <div className="space-y-3">
-                  {networkStats?.latestBlocks?.slice(0, 5).map((block, index) => (
+                  {networkStats?.latestBlocks?.slice(0, 5).map((block) => (
                     <div key={block.hash} className="flex justify-between items-center p-3 bg-white/50 rounded-lg hover:bg-white/70 transition-colors">
                       <div>
                         <div className="font-semibold text-neutral-900">#{block.number}</div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -9,8 +9,6 @@ import { SUPPORTED_CHAINS, getChainById } from '@/config/chains'
 import { ethers } from 'ethers'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { Menu, Transition } from '@headlessui/react'
-import { Fragment } from 'react'
 import SearchModal from '@/components/SearchModal'
 import WalletConnection from '@/components/WalletConnection'
 import Link from 'next/link'
@@ -54,7 +52,7 @@ export default function ZetaChainHoldings() {
     link: { price: 14.78, change: 1.23 }
   })
 
-  const fetchTokenData = async (address: string, currentChainId: number) => {
+  const fetchTokenData = useCallback(async (address: string, currentChainId: number) => {
     setIsLoading(true)
     setIsFetchingPrices(false)
     
@@ -150,16 +148,16 @@ export default function ZetaChainHoldings() {
       setIsLoading(false)
       setIsFetchingPrices(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (address && chainId) {
       fetchTokenData(address, chainId)
     }
-  }, [address, chainId])
+  }, [address, chainId, fetchTokenData])
 
   // Fetch real live price data from CoinGecko
-  const fetchLiveData = async () => {
+  const fetchLiveData = useCallback(async () => {
     try {
       const symbols = ['BTC', 'ETH', 'ZETA', 'SOL', 'ADA', 'LINK']
       
@@ -169,7 +167,7 @@ export default function ZetaChainHoldings() {
         setTimeout(() => reject(new Error('Live data fetch timeout')), 8000)
       )
       
-      const tokenData = await Promise.race([tokenDataPromise, timeoutPromise]) as Record<string, any>
+      const tokenData = await Promise.race([tokenDataPromise, timeoutPromise]) as Record<string, { price: number; change24h: number }>
       
       const newLiveData = {
         btc: { 
@@ -204,7 +202,7 @@ export default function ZetaChainHoldings() {
       console.warn('Error fetching live data, using cached values:', error)
       // Keep existing live data instead of failing
     }
-  }
+  }, [liveData])
 
   useEffect(() => {
     // Fetch live data immediately and then every 30 seconds
@@ -212,7 +210,7 @@ export default function ZetaChainHoldings() {
     const interval = setInterval(fetchLiveData, 30000)
     
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchLiveData])
 
   const getCurrentChain = () => {
     return getChainById(chainId)
@@ -826,7 +824,7 @@ export default function ZetaChainHoldings() {
                         <button
                           key={network.id}
                           onClick={() => {
-                            switchChain({ chainId: network.id as any })
+                            switchChain({ chainId: network.id as 1 | 11155111 | 17000 | 7000 | 7001 | 137 | 80001 | 42161 | 421614 | 10 | 11155420 | 8453 | 84532 })
                             setShowNetworkDropdown(false)
                           }}
                           className={`w-full flex items-center justify-between p-2 rounded-lg text-sm transition-colors ${
@@ -836,7 +834,7 @@ export default function ZetaChainHoldings() {
                           }`}
                         >
                           <div className="flex items-center space-x-2">
-                            <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${network.iconGradient} flex items-center justify-center text-white text-xs font-bold`}>
+                            <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${network.gradient} flex items-center justify-center text-white text-xs font-bold`}>
                               {network.icon}
                             </div>
                             <span className="font-medium text-gray-900">{network.name}</span>
