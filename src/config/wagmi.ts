@@ -1,5 +1,17 @@
 import { createConfig, http } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
+import { 
+  mainnet, 
+  sepolia, 
+  holesky,
+  polygon, 
+  polygonMumbai,
+  arbitrum,
+  arbitrumSepolia,
+  optimism,
+  optimismSepolia,
+  base,
+  baseSepolia
+} from 'wagmi/chains'
 import { 
   walletConnect, 
   metaMask, 
@@ -48,15 +60,32 @@ const zetaAthens = {
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'a01e2f3c4d5e6f7g8h9i0j1k2l3m4n5o'
 
 export const config = createConfig({
-  chains: [mainnet, sepolia, zetaMainnet, zetaAthens],
+  chains: [
+    // Ethereum networks
+    mainnet, 
+    sepolia, 
+    holesky,
+    // Layer 2 networks
+    polygon,
+    polygonMumbai,
+    arbitrum,
+    arbitrumSepolia,
+    optimism,
+    optimismSepolia,
+    base,
+    baseSepolia,
+    // ZetaChain networks
+    zetaMainnet, 
+    zetaAthens
+  ],
   connectors: [
-    injected({ shimDisconnect: true }),
     metaMask({
       dappMetadata: {
         name: 'ZetaChain Holdings',
         url: typeof window !== 'undefined' ? window.location.href : '',
       },
     }),
+    injected({ shimDisconnect: true }),
     walletConnect({
       projectId,
       metadata: {
@@ -79,8 +108,20 @@ export const config = createConfig({
     }),
   ],
   transports: {
+    // Ethereum networks
     [mainnet.id]: http(),
     [sepolia.id]: http(),
+    [holesky.id]: http(),
+    // Layer 2 networks  
+    [polygon.id]: http(),
+    [polygonMumbai.id]: http(),
+    [arbitrum.id]: http(),
+    [arbitrumSepolia.id]: http(),
+    [optimism.id]: http(),
+    [optimismSepolia.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
+    // ZetaChain networks
     [zetaMainnet.id]: http('https://zetachain-evm.blockpi.network/v1/rpc/public'),
     [zetaAthens.id]: http('https://zetachain-athens-evm.blockpi.network/v1/rpc/public'),
   },

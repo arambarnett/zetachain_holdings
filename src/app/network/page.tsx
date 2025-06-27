@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { fetchNetworkStats, formatNumber } from '@/lib/blockscout'
 import { 
   ServerIcon,
   GlobeAltIcon,
   CpuChipIcon,
   ClockIcon,
-  ShieldCheckIcon,
   BoltIcon,
   ArrowTrendingUpIcon,
   CheckCircleIcon,
@@ -28,110 +28,93 @@ interface NetworkMetric {
   icon: React.ReactNode
 }
 
-interface Validator {
-  name: string
-  stake: string
-  commission: string
-  uptime: string
-  status: 'active' | 'inactive' | 'jailed'
-}
 
 export default function NetworkHealthPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [networkMetrics, setNetworkMetrics] = useState<NetworkMetric[]>([
-    {
-      label: 'Block Height',
-      value: '2,847,291',
-      change: '+1.2%',
-      status: 'good',
-      icon: <CpuChipIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Average Block Time',
-      value: '6.2s',
-      change: '-0.3s',
-      status: 'good', 
-      icon: <ClockIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Total Validators',
-      value: '104',
-      change: '+2',
-      status: 'good',
-      icon: <ServerIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Network Uptime',
-      value: '99.97%',
-      change: '+0.01%',
-      status: 'good',
-      icon: <ShieldCheckIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Active Connections',
-      value: '8,942',
-      change: '+5.2%',
-      status: 'good',
-      icon: <GlobeAltIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Total Supply',
-      value: '2.1B ZETA',
-      change: '+0.1%',
-      status: 'good',
-      icon: <CurrencyDollarIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Staked Tokens',
-      value: '1.2B ZETA',
-      change: '+2.1%',
-      status: 'good',
-      icon: <BoltIcon className="w-6 h-6" />
-    },
-    {
-      label: 'Gas Price',
-      value: '0.004 ZETA',
-      change: '-2.1%',
-      status: 'good',
-      icon: <ArrowPathIcon className="w-6 h-6" />
+  const [networkMetrics, setNetworkMetrics] = useState<NetworkMetric[]>([])
+  const [loading, setLoading] = useState(true)
+  const [networkStats, setNetworkStats] = useState<{
+    blockHeight: number
+    avgBlockTime: number
+    totalTransactions: number
+    totalAddresses: number
+    avgTransactionFee: string
+  } | null>(null)
+
+
+  // Fetch real network data
+  const loadNetworkData = async () => {
+    try {
+      setLoading(true)
+      const stats = await fetchNetworkStats()
+
+      if (stats) {
+        setNetworkStats(stats)
+        
+        // Create metrics array with real data
+        const metrics: NetworkMetric[] = [
+          {
+            label: 'Block Height',
+            value: formatNumber(stats.blockHeight),
+            status: 'good',
+            icon: <CpuChipIcon className="w-6 h-6" />
+          },
+          {
+            label: 'Average Block Time',
+            value: `${stats.avgBlockTime.toFixed(1)}s`,
+            status: stats.avgBlockTime < 10 ? 'good' : 'warning',
+            icon: <ClockIcon className="w-6 h-6" />
+          },
+          {
+            label: 'Total Transactions',
+            value: formatNumber(stats.totalTransactions),
+            status: 'good',
+            icon: <ArrowPathIcon className="w-6 h-6" />
+          },
+          {
+            label: 'Active Addresses',
+            value: formatNumber(stats.totalAddresses),
+            status: 'good',
+            icon: <GlobeAltIcon className="w-6 h-6" />
+          },
+          {
+            label: 'Avg Transaction Fee',
+            value: stats.avgTransactionFee,
+            status: 'good',
+            icon: <CurrencyDollarIcon className="w-6 h-6" />
+          }
+        ]
+
+
+        setNetworkMetrics(metrics)
+      }
+    } catch (error) {
+      console.error('Error loading network data:', error)
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
 
-  const topValidators: Validator[] = [
-    { name: 'ZetaChain Foundation', stake: '15.2M ZETA', commission: '5%', uptime: '99.99%', status: 'active' },
-    { name: 'Cosmos Hub Validator', stake: '12.8M ZETA', commission: '7%', uptime: '99.95%', status: 'active' },
-    { name: 'Staking Rewards', stake: '11.4M ZETA', commission: '6%', uptime: '99.92%', status: 'active' },
-    { name: 'Validator One', stake: '10.9M ZETA', commission: '8%', uptime: '99.88%', status: 'active' },
-    { name: 'Chain Security', stake: '9.7M ZETA', commission: '5%', uptime: '99.94%', status: 'active' },
-    { name: 'Node Guardians', stake: '8.3M ZETA', commission: '9%', uptime: '99.85%', status: 'active' },
-    { name: 'Block Producer', stake: '7.1M ZETA', commission: '7%', uptime: '99.91%', status: 'active' },
-    { name: 'Secure Staking', stake: '6.8M ZETA', commission: '6%', uptime: '99.89%', status: 'active' }
-  ]
+  // Load initial data
+  useEffect(() => {
+    loadNetworkData()
+  }, [])
 
-  // Simulate real-time updates
+  // Update time and refresh data periodically
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date())
-      
-      // Simulate minor metric updates
-      setNetworkMetrics(prev => prev.map(metric => {
-        if (Math.random() < 0.3) { // 30% chance to update
-          let newValue = metric.value
-          if (metric.label === 'Block Height') {
-            const current = parseInt(metric.value.replace(/,/g, ''))
-            newValue = (current + Math.floor(Math.random() * 3) + 1).toLocaleString()
-          } else if (metric.label === 'Average Block Time') {
-            const variation = (Math.random() - 0.5) * 0.2
-            const current = parseFloat(metric.value.replace('s', ''))
-            newValue = `${Math.max(5.0, current + variation).toFixed(1)}s`
-          }
-          return { ...metric, value: newValue }
-        }
-        return metric
-      }))
-    }, 5000) // Update every 5 seconds
+    }, 1000)
 
-    return () => clearInterval(timer)
+    // Refresh network data every 30 seconds
+    const dataTimer = setInterval(() => {
+      loadNetworkData()
+    }, 30000)
+
+    return () => {
+      clearInterval(timer)
+      clearInterval(dataTimer)
+    }
   }, [])
 
   const getStatusColor = (status: string) => {
@@ -152,14 +135,6 @@ export default function NetworkHealthPage() {
     }
   }
 
-  const getValidatorStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800'
-      case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'jailed': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -213,18 +188,18 @@ export default function NetworkHealthPage() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="text-center">
-                <div className="text-3xl font-bold">2.1B+</div>
-                <div className="text-zeta-100 text-sm">Total Value Secured</div>
+                <div className="text-4xl font-bold">
+                  {loading ? '...' : networkStats ? formatNumber(networkStats.totalTransactions) : '0'}
+                </div>
+                <div className="text-zeta-100 text-sm">Total Transactions</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold">104</div>
-                <div className="text-zeta-100 text-sm">Active Validators</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold">99.97%</div>
-                <div className="text-zeta-100 text-sm">Network Uptime</div>
+                <div className="text-4xl font-bold">
+                  {loading ? '...' : networkStats ? formatNumber(networkStats.blockHeight) : '0'}
+                </div>
+                <div className="text-zeta-100 text-sm">Current Block Height</div>
               </div>
             </div>
           </motion.div>
@@ -266,62 +241,14 @@ export default function NetworkHealthPage() {
             ))}
           </motion.div>
 
-          {/* Validators Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Top Validators */}
-            <motion.div 
-              className="lg:col-span-2 bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-neutral-900 flex items-center">
-                  <ServerIcon className="w-5 h-5 mr-2 text-zeta-600" />
-                  Top Validators
-                </h3>
-                <button className="text-zeta-600 hover:text-zeta-700 text-sm font-medium transition-colors">
-                  View All →
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                {topValidators.map((validator, index) => (
-                  <div key={validator.name} className="flex items-center justify-between p-4 bg-white/50 rounded-xl hover:bg-white/70 transition-colors">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-8 h-8 bg-gradient-to-r from-zeta-500 to-zeta-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-neutral-900">{validator.name}</div>
-                        <div className="text-sm text-neutral-600">Stake: {validator.stake}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center space-x-4 text-right">
-                      <div>
-                        <div className="text-sm text-neutral-600">Commission</div>
-                        <div className="font-medium text-neutral-900">{validator.commission}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-neutral-600">Uptime</div>
-                        <div className="font-medium text-neutral-900">{validator.uptime}</div>
-                      </div>
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getValidatorStatusColor(validator.status)}`}>
-                        {validator.status}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
+          {/* Network Information Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Network Info */}
             <motion.div 
               className="space-y-6"
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
             >
               {/* Chain Information */}
               <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
@@ -347,28 +274,71 @@ export default function NetworkHealthPage() {
                 </div>
               </div>
 
-              {/* Governance */}
+            </motion.div>
+
+            {/* Additional Network Statistics */}
+            <motion.div 
+              className="space-y-6"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+            >
+              {/* Latest Blocks */}
               <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
                 <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center">
-                  <UsersIcon className="w-5 h-5 mr-2 text-zeta-600" />
-                  Governance
+                  <ServerIcon className="w-5 h-5 mr-2 text-zeta-600" />
+                  Latest Blocks
                 </h3>
                 
-                <div className="space-y-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-neutral-900">12</div>
-                    <div className="text-sm text-neutral-600">Active Proposals</div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-neutral-600">Voting Power</span>
-                      <span className="font-medium text-neutral-900">87.4%</span>
+                <div className="space-y-3">
+                  {networkStats?.latestBlocks?.slice(0, 5).map((block, index) => (
+                    <div key={block.hash} className="flex justify-between items-center p-3 bg-white/50 rounded-lg hover:bg-white/70 transition-colors">
+                      <div>
+                        <div className="font-semibold text-neutral-900">#{block.number}</div>
+                        <div className="text-sm text-neutral-600">{block.transaction_count} txns</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-neutral-600">Gas Used</div>
+                        <div className="font-medium text-neutral-900">{formatNumber(parseInt(block.gas_used || '0'))}</div>
+                      </div>
                     </div>
-                    <div className="w-full bg-neutral-200 rounded-full h-2">
-                      <div className="bg-gradient-to-r from-zeta-500 to-zeta-600 h-2 rounded-full" style={{ width: '87.4%' }}></div>
+                  )) || (
+                    <div className="text-center py-4 text-neutral-500">
+                      {loading ? 'Loading blocks...' : 'No block data available'}
                     </div>
-                  </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Network Explorer Links */}
+              <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
+                <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center">
+                  <LinkIcon className="w-5 h-5 mr-2 text-zeta-600" />
+                  Explorer Links
+                </h3>
+                
+                <div className="space-y-3">
+                  <button 
+                    onClick={() => window.open('https://explorer.zetachain.com', '_blank')}
+                    className="w-full flex items-center justify-between p-3 bg-white/50 rounded-lg hover:bg-white/70 transition-colors text-left"
+                  >
+                    <span className="font-medium text-neutral-900">ZetaChain Explorer</span>
+                    <span className="text-zeta-600">→</span>
+                  </button>
+                  <button 
+                    onClick={() => window.open('https://zetachain.blockscout.com', '_blank')}
+                    className="w-full flex items-center justify-between p-3 bg-white/50 rounded-lg hover:bg-white/70 transition-colors text-left"
+                  >
+                    <span className="font-medium text-neutral-900">Blockscout Explorer</span>
+                    <span className="text-zeta-600">→</span>
+                  </button>
+                  <button 
+                    onClick={() => window.open('https://explorer.zetachain.com/validators', '_blank')}
+                    className="w-full flex items-center justify-between p-3 bg-white/50 rounded-lg hover:bg-white/70 transition-colors text-left"
+                  >
+                    <span className="font-medium text-neutral-900">View Validators</span>
+                    <span className="text-zeta-600">→</span>
+                  </button>
                 </div>
               </div>
             </motion.div>

@@ -230,8 +230,9 @@ export const getTokenPrices = async (symbols: string[]): Promise<Record<string, 
       `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd`,
       {
         headers: {
-          'X-CG-API-KEY': 'CG-dbufBv4poxBTxgc181AQnsEB'
-        }
+          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       }
     );
     
@@ -296,8 +297,9 @@ export const getTokenData = async (symbols: string[]): Promise<Record<string, To
       `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`,
       {
         headers: {
-          'X-CG-API-KEY': 'CG-dbufBv4poxBTxgc181AQnsEB'
-        }
+          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       }
     );
     
@@ -363,7 +365,7 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
       `https://api.coingecko.com/api/v3/coins/${geckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`,
       {
         headers: {
-          'X-CG-API-KEY': 'CG-dbufBv4poxBTxgc181AQnsEB'
+          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
         }
       }
     );

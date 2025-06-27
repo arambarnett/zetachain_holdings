@@ -69,7 +69,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-indigo-500', to: 'to-indigo-600' },
     color: { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200' },
     isMainnet: false,
-    isSupported: false, // Can be enabled later
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'ethereum'
   },
@@ -118,7 +118,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-purple-500', to: 'to-pink-500' },
     color: { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' },
     isMainnet: true,
-    isSupported: false, // Can be enabled later
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'polygon'
   },
@@ -133,7 +133,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-purple-400', to: 'to-pink-400' },
     color: { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200' },
     isMainnet: false,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'polygon'
   },
@@ -150,7 +150,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-blue-400', to: 'to-cyan-400' },
     color: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
     isMainnet: true,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'arbitrum'
   },
@@ -165,7 +165,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-blue-300', to: 'to-cyan-300' },
     color: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
     isMainnet: false,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'arbitrum'
   },
@@ -182,7 +182,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-red-500', to: 'to-pink-500' },
     color: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
     isMainnet: true,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'optimism'
   },
@@ -197,7 +197,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-red-400', to: 'to-pink-400' },
     color: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
     isMainnet: false,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'optimism'
   },
@@ -214,7 +214,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-blue-600', to: 'to-indigo-600' },
     color: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
     isMainnet: true,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'base'
   },
@@ -229,7 +229,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-blue-400', to: 'to-indigo-400' },
     color: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
     isMainnet: false,
-    isSupported: false,
+    isSupported: true,
     supportedBy: 'alchemy',
     category: 'base'
   }
