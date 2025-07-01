@@ -232,44 +232,19 @@ export default function ComparePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.05 }}
           >
-            <h3 className="text-xl font-semibold text-neutral-900 mb-6">Select Network</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {SUPPORTED_CHAINS.map(chain => {
-                const isActive = chainId === chain.id
-                
-                return (
-                  <motion.button
-                    key={chain.id}
-                    onClick={() => switchChain({ chainId: chain.id as 1 | 11155111 | 7000 | 7001 })}
-                    className={`p-4 rounded-xl font-medium transition-all duration-200 border text-left ${
-                      isActive
-                        ? 'bg-gradient-to-r from-zeta-500 to-zeta-600 text-white border-transparent shadow-lg'
-                        : 'bg-white/50 hover:bg-white border-neutral-200 hover:shadow-md hover:border-zeta-300 text-neutral-900'
-                    }`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        isActive ? 'bg-white' : `bg-gradient-to-r ${chain.gradient.from} ${chain.gradient.to}`
-                      }`} />
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{chain.icon}</span>
-                          <span className="font-semibold">{chain.name}</span>
-                        </div>
-                        {!chain.isMainnet && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block ${
-                            isActive ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800'
-                          }`}>
-                            Testnet
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </motion.button>
-                )
-              })}
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-neutral-900">Select Network</h3>
+              <select
+                value={chainId}
+                onChange={(e) => switchChain({ chainId: parseInt(e.target.value) as 1 | 11155111 | 7000 | 7001 })}
+                className="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:border-zeta-500 focus:outline-none focus:ring-1 focus:ring-zeta-500 bg-white"
+              >
+                {SUPPORTED_CHAINS.map(chain => (
+                  <option key={chain.id} value={chain.id}>
+                    {chain.icon} {chain.name} {!chain.isMainnet ? '(Testnet)' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </motion.div>
 

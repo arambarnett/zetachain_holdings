@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getTokenBalances, getTokenPrices, getTokenData, TokenBalance } from '@/lib/alchemy'
+import { getTokenBalances, getTokenPrices, getTokenData, preloadCommonPrices, TokenBalance } from '@/lib/alchemy'
 import { SUPPORTED_CHAINS, getChainById } from '@/config/chains'
 import { ethers } from 'ethers'
 import Header from '@/components/Header'
@@ -82,7 +82,7 @@ export default function ZetaChainHoldings() {
       setTokens(tokensWithoutPrices)
       setIsLoading(false)
       
-      // Step 3: Fetch prices in background
+      // Step 3: Fetch prices in background with optimizations
       setIsFetchingPrices(true)
       console.log('Fetching token prices...')
       
@@ -95,24 +95,19 @@ export default function ZetaChainHoldings() {
         uniqueSymbols.push(nativeTokenSymbol)
       }
       
-      // Retry logic for price fetching
-      let prices: Record<string, number> = {}
-      let retryCount = 0
-      const maxRetries = 3
+      // Add common tokens to batch fetch for better caching
+      const commonTokens = ['ETH', 'BTC', 'USDC', 'USDT']
+      const allSymbols = [...new Set([...uniqueSymbols, ...commonTokens])]
       
-      while (retryCount < maxRetries) {
-        try {
-          prices = await getTokenPrices(uniqueSymbols)
-          console.log('Prices fetched successfully:', prices)
-          break
-        } catch (priceError) {
-          retryCount++
-          console.warn(`Price fetch attempt ${retryCount} failed:`, priceError)
-          if (retryCount < maxRetries) {
-            // Wait before retry (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount))
-          }
-        }
+      // Single API call with timeout - no retries needed due to caching
+      let prices: Record<string, number> = {}
+      try {
+        prices = await getTokenPrices(allSymbols)
+        console.log('Prices fetched successfully:', prices)
+      } catch (priceError) {
+        console.warn('Price fetch failed, using cached prices:', priceError)
+        // getTokenPrices already handles caching internally
+        prices = await getTokenPrices(uniqueSymbols) // Try with just needed symbols
       }
 
       // Step 4: Update tokens with prices
@@ -205,6 +200,9 @@ export default function ZetaChainHoldings() {
   }, [liveData])
 
   useEffect(() => {
+    // Preload common prices on app load for better performance
+    preloadCommonPrices()
+    
     // Fetch live data immediately and then every 30 seconds
     fetchLiveData()
     const interval = setInterval(fetchLiveData, 30000)
@@ -458,13 +456,6 @@ export default function ZetaChainHoldings() {
                       transition={{ duration: 0.6, delay: 0.4 }}
                     >
                       <WalletConnection />
-                      <button 
-                        onClick={() => setShowSearch(true)}
-                        className="inline-flex items-center px-6 py-3 border border-neutral-300 text-base font-medium rounded-xl text-neutral-700 bg-white hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-zeta-500 transition-all duration-200 shadow-lg hover:shadow-xl"
-                      >
-                        <EyeIcon className="w-5 h-5 mr-2" />
-                        View Demo Portfolio
-                      </button>
                     </motion.div>
 
                     {/* Live Price Ticker */}

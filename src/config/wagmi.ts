@@ -1,4 +1,5 @@
 import { createConfig, http } from 'wagmi'
+import { createStorage, noopStorage } from 'wagmi'
 import { 
   mainnet, 
   sepolia, 
@@ -78,6 +79,11 @@ export const config = createConfig({
     zetaMainnet, 
     zetaAthens
   ],
+  storage: createStorage({
+    storage: typeof window !== 'undefined' ? window.localStorage : noopStorage,
+    key: 'zetachain-wagmi',
+  }),
+  ssr: true,
   connectors: [
     metaMask({
       dappMetadata: {

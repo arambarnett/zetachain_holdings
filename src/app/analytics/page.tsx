@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { getTokenBalances, getTokenPrices, TokenBalance } from '@/lib/alchemy'
-import { SUPPORTED_CHAINS } from '@/config/chains'
+import { getAddressTokenBalances, getAddressNativeBalance } from '@/lib/blockscout'
+import { SUPPORTED_CHAINS, getChainById } from '@/config/chains'
 import { ethers } from 'ethers'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -16,7 +18,9 @@ import {
   BanknotesIcon,
   CalendarIcon,
   ClockIcon,
-  EyeIcon
+  EyeIcon,
+  ChevronDownIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline'
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
 
@@ -33,22 +37,85 @@ export default function AnalyticsPage() {
   const { switchChain } = useSwitchChain()
   const [tokens, setTokens] = useState<TokenWithPrice[]>([])
   const [, setIsLoading] = useState(false)
+  const [isFetchingPrices, setIsFetchingPrices] = useState(false)
   const [totalValue, setTotalValue] = useState(0)
   const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d' | '90d' | '1y'>('30d')
+  const [showNetworkDropdown, setShowNetworkDropdown] = useState(false)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
+  const networkButtonRef = useRef<HTMLButtonElement>(null)
 
   const fetchTokenData = async (address: string, currentChainId: number) => {
     setIsLoading(true)
+    setIsFetchingPrices(false)
+    
     try {
-      const tokenBalances = await getTokenBalances(address, currentChainId)
+      // Step 1: Fetch token balances (use Blockscout for ZetaChain)
+      console.log('Fetching token balances...')
+      let tokenBalances: TokenBalance[] = []
+      
+      if (currentChainId === 7000) {
+        // Use Blockscout for ZetaChain
+        const [nativeBalance, tokenBalancesBlockscout] = await Promise.all([
+          getAddressNativeBalance(address),
+          getAddressTokenBalances(address)
+        ])
+        
+        // Convert Blockscout format to TokenBalance format
+        if (nativeBalance && parseFloat(nativeBalance.value) > 0) {
+          tokenBalances.push({
+            contractAddress: '0x0000000000000000000000000000000000000000',
+            tokenBalance: nativeBalance.value,
+            symbol: 'ZETA',
+            name: 'ZetaChain',
+            decimals: 18
+          })
+        }
+        
+        tokenBalances.push(...tokenBalancesBlockscout.map(tb => ({
+          contractAddress: tb.token.address,
+          tokenBalance: tb.value,
+          symbol: tb.token.symbol,
+          name: tb.token.name,
+          decimals: tb.token.decimals,
+          logo: tb.token.icon_url
+        })))
+      } else {
+        // Use Alchemy for other chains
+        tokenBalances = await getTokenBalances(address, currentChainId)
+      }
       
       if (tokenBalances.length === 0) {
         setTokens([])
         setTotalValue(0)
+        setIsLoading(false)
         return
       }
 
+      // Step 2: Create initial tokens without prices
+      const tokensWithoutPrices: TokenWithPrice[] = tokenBalances.map(token => {
+        const balance = parseFloat(ethers.formatUnits(token.tokenBalance, token.decimals))
+        return {
+          ...token,
+          formattedBalance: balance.toFixed(6),
+          usdValue: 0, // Initially 0, will be updated after price fetch
+          change24h: 0,
+          volume24h: 0
+        }
+      })
+
+      // Set tokens immediately so user sees their balances
+      setTokens(tokensWithoutPrices)
+      setIsLoading(false)
+      
+      // Step 3: Fetch prices in background
+      setIsFetchingPrices(true)
+      console.log('Fetching token prices...')
+      
       const uniqueSymbols = [...new Set(tokenBalances.map(token => token.symbol))]
-      const prices = await getTokenPrices(uniqueSymbols)
+      const commonTokens = ['ETH', 'BTC', 'USDC', 'USDT']
+      const allSymbols = [...new Set([...uniqueSymbols, ...commonTokens])]
+      
+      const prices = await getTokenPrices(allSymbols)
 
       const tokensWithPrices: TokenWithPrice[] = tokenBalances.map(token => {
         const balance = parseFloat(ethers.formatUnits(token.tokenBalance, token.decimals))
@@ -66,10 +133,12 @@ export default function AnalyticsPage() {
 
       setTokens(tokensWithPrices)
       setTotalValue(tokensWithPrices.reduce((sum, token) => sum + token.usdValue, 0))
+      
     } catch (error) {
       console.error('Error fetching token data:', error)
     } finally {
       setIsLoading(false)
+      setIsFetchingPrices(false)
     }
   }
 
@@ -78,6 +147,21 @@ export default function AnalyticsPage() {
       fetchTokenData(address, chainId)
     }
   }, [address, chainId])
+
+  const getCurrentChain = () => {
+    return getChainById(chainId)
+  }
+
+  const handleNetworkDropdownToggle = () => {
+    if (!showNetworkDropdown && networkButtonRef.current) {
+      const rect = networkButtonRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY + 8,
+        left: rect.right - 320 + window.scrollX, // 320px is dropdown width
+      })
+    }
+    setShowNetworkDropdown(!showNetworkDropdown)
+  }
 
   const formatPrice = (value: number) => {
     if (value === 0) return '$0.00'
@@ -143,11 +227,28 @@ export default function AnalyticsPage() {
   const totalChange = performanceData.length > 1 ? 
     ((performanceData[performanceData.length - 1].value - performanceData[0].value) / performanceData[0].value) * 100 : 0
 
+  // Calculate time-based portfolio change
+  const calculateTimeBasedChange = () => {
+    if (performanceData.length < 2) return 0
+    const timeframes = {
+      '24h': 1,
+      '7d': 7,
+      '30d': 30,
+      '90d': 90,
+      '1y': 365
+    }
+    const daysBack = timeframes[timeframe]
+    const dataPoints = Math.min(daysBack, performanceData.length - 1)
+    const oldValue = performanceData[performanceData.length - 1 - dataPoints]?.value || totalValue
+    const currentValue = performanceData[performanceData.length - 1]?.value || totalValue
+    return oldValue > 0 ? ((currentValue - oldValue) / oldValue) * 100 : 0
+  }
+
   // Calculate portfolio metrics
   const portfolioMetrics = {
     totalAssets: tokens.length,
     totalValue: totalValue,
-    avgTokenValue: tokens.length > 0 ? totalValue / tokens.length : 0,
+    timeBasedChange: calculateTimeBasedChange(),
     topHolding: tokens.length > 0 ? tokens.reduce((prev, current) => 
       prev.usdValue > current.usdValue ? prev : current
     ) : null,
@@ -204,54 +305,92 @@ export default function AnalyticsPage() {
               Portfolio Analytics
             </h1>
             <p className="text-neutral-600">Advanced insights and performance metrics for your Web3 portfolio</p>
+            
+            {/* Global Price Loading Notification */}
+            <AnimatePresence>
+              {isFetchingPrices && (
+                <motion.div 
+                  className="mt-4 flex items-center justify-center p-4 bg-blue-50 border border-blue-200 rounded-xl"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <div className="text-blue-700">
+                      <span className="font-medium">Fetching latest prices...</span>
+                      <span className="text-sm text-blue-600 ml-2">This may take a few seconds</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
 
-          {/* Network Selector */}
+          {/* Network Selector - Dropdown */}
           <motion.div 
             className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20 mb-8"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.05 }}
           >
-            <h3 className="text-xl font-semibold text-neutral-900 mb-6">Select Network</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {SUPPORTED_CHAINS.map(chain => {
-                const isActive = chainId === chain.id
-                
-                return (
-                  <motion.button
-                    key={chain.id}
-                    onClick={() => switchChain({ chainId: chain.id as 1 | 11155111 | 7000 | 7001 })}
-                    className={`p-4 rounded-xl font-medium transition-all duration-200 border text-left ${
-                      isActive
-                        ? 'bg-gradient-to-r from-zeta-500 to-zeta-600 text-white border-transparent shadow-lg'
-                        : 'bg-white/50 hover:bg-white border-neutral-200 hover:shadow-md hover:border-zeta-300 text-neutral-900'
-                    }`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        isActive ? 'bg-white' : `bg-gradient-to-r ${chain.gradient.from} ${chain.gradient.to}`
-                      }`} />
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-lg">{chain.icon}</span>
-                          <span className="font-semibold">{chain.name}</span>
-                        </div>
-                        {!chain.isMainnet && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block ${
-                            isActive ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800'
-                          }`}>
-                            Testnet
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </motion.button>
-                )
-              })}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <h3 className="text-xl font-semibold text-neutral-900">Current Network</h3>
+                {isFetchingPrices && (
+                  <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 rounded-full">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-sm text-blue-700 font-medium">Fetching prices...</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Network Dropdown */}
+              <div className="relative">
+                <button
+                  ref={networkButtonRef}
+                  onClick={handleNetworkDropdownToggle}
+                  className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-zeta-500 to-zeta-600 text-white rounded-lg font-medium hover:from-zeta-600 hover:to-zeta-700 transition-all duration-200 shadow-lg"
+                >
+                  Switch Network
+                  <ChevronDownIcon className="w-4 h-4 ml-2" />
+                </button>
+              </div>
             </div>
+            
+            {getCurrentChain() && (
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-zeta-500 to-zeta-600 rounded-xl text-white">
+                <div className="flex items-center space-x-6">
+                  <div className="text-left">
+                    <div className="text-sm text-zeta-100">Total Value</div>
+                    <div className="font-bold text-2xl">
+                      {isFetchingPrices && totalValue === 0 ? (
+                        <span className="flex items-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Loading...</span>
+                        </span>
+                      ) : (
+                        formatPrice(totalValue)
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <div className="text-sm text-zeta-100">Assets</div>
+                    <div className="font-bold text-2xl">{tokens.length}</div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className={`w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white text-sm font-bold`}>
+                    {getCurrentChain()?.icon || '⚡'}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{getCurrentChain()?.name}</div>
+                    <div className="text-xs text-zeta-100">Chain ID: {getCurrentChain()?.id}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* Key Metrics Cards */}
@@ -264,7 +403,7 @@ export default function AnalyticsPage() {
             {[
               {
                 title: 'Total Value',
-                value: formatPrice(portfolioMetrics.totalValue),
+                value: isFetchingPrices && portfolioMetrics.totalValue === 0 ? 'Loading...' : formatPrice(portfolioMetrics.totalValue),
                 change: totalChange,
                 icon: <CurrencyDollarIcon className="w-8 h-8" />,
                 color: 'from-zeta-500 to-zeta-600'
@@ -277,11 +416,11 @@ export default function AnalyticsPage() {
                 color: 'from-blue-500 to-blue-600'
               },
               {
-                title: 'Average Value',
-                value: formatPrice(portfolioMetrics.avgTokenValue),
-                change: Math.random() * 20 - 10,
-                icon: <ChartBarIcon className="w-8 h-8" />,
-                color: 'from-purple-500 to-purple-600'
+                title: `${timeframe.toUpperCase()} Change`,
+                value: `${portfolioMetrics.timeBasedChange >= 0 ? '+' : ''}${portfolioMetrics.timeBasedChange.toFixed(2)}%`,
+                change: portfolioMetrics.timeBasedChange,
+                icon: portfolioMetrics.timeBasedChange >= 0 ? <ArrowTrendingUpIcon className="w-8 h-8" /> : <ArrowTrendingDownIcon className="w-8 h-8" />,
+                color: portfolioMetrics.timeBasedChange >= 0 ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'
               },
               {
                 title: 'Top Holding',
@@ -519,6 +658,69 @@ export default function AnalyticsPage() {
       </main>
 
       <Footer />
+
+      {/* Network Dropdown Portal */}
+      {showNetworkDropdown && typeof window !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999]"
+          onClick={() => setShowNetworkDropdown(false)}
+        >
+          <div 
+            className="absolute w-80 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl ring-1 ring-black/5 max-h-80 overflow-y-auto"
+            style={{
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3">
+              {['Ethereum', 'Layer 2', 'ZetaChain'].map((category) => {
+                const networksInCategory = SUPPORTED_CHAINS.filter(chain => {
+                  if (category === 'Ethereum') return [1, 11155111, 17000].includes(chain.id)
+                  if (category === 'Layer 2') return [137, 80001, 42161, 421614, 10, 11155420, 8453, 84532].includes(chain.id)
+                  if (category === 'ZetaChain') return [7000, 7001].includes(chain.id)
+                  return false
+                })
+                
+                if (networksInCategory.length === 0) return null
+                
+                return (
+                  <div key={category} className="mb-4 last:mb-0">
+                    <div className="text-xs font-semibold text-gray-500 mb-2 px-2">{category}</div>
+                    <div className="space-y-1">
+                      {networksInCategory.map((network) => (
+                        <button
+                          key={network.id}
+                          onClick={() => {
+                            switchChain({ chainId: network.id as 1 | 11155111 | 17000 | 7000 | 7001 | 137 | 80001 | 42161 | 421614 | 10 | 11155420 | 8453 | 84532 })
+                            setShowNetworkDropdown(false)
+                          }}
+                          className={`w-full flex items-center justify-between p-2 rounded-lg text-sm transition-colors ${
+                            chainId === network.id
+                              ? 'bg-zeta-50 text-zeta-700 border border-zeta-200'
+                              : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-6 h-6 rounded-lg bg-gradient-to-br ${network.gradient} flex items-center justify-center text-white text-xs font-bold`}>
+                              {network.icon}
+                            </div>
+                            <span className="font-medium text-gray-900">{network.name}</span>
+                          </div>
+                          {chainId === network.id && (
+                            <CheckIcon className="w-4 h-4 text-zeta-600" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

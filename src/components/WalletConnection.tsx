@@ -128,14 +128,11 @@ export default function WalletConnection() {
         return
       }
 
-      // Direct MetaMask connection - simpler approach
+      // Direct MetaMask connection - no page refresh needed with wagmi v2
       await ethereum.request({ method: 'eth_requestAccounts' })
       setShowWalletModal(false)
       
-      // Force page refresh to ensure wagmi picks up the connection
-      setTimeout(() => {
-        window.location.reload()
-      }, 500)
+      // No page refresh needed - wagmi handles connection state automatically
       
     } catch (error: unknown) {
       console.error('MetaMask connection error:', error)

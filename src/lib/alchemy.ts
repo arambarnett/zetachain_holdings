@@ -171,7 +171,7 @@ export const getTokenBalances = async (address: string, chainId: number): Promis
         if (data.result && data.result !== '0x0') {
           return [
             {
-              contractAddress: '0x0000000000000000000000000000000000000000',
+              contractAddress: '0xf091867ec603a6628ed83d274e835539d82e9cc8',
               tokenBalance: data.result,
               symbol: 'ZETA',
               name: 'ZetaChain',
@@ -193,8 +193,129 @@ export const getTokenBalances = async (address: string, chainId: number): Promis
   }
 };
 
+// Price cache to reduce API calls
+const priceCache = new Map<string, { price: number; timestamp: number }>()
+const CACHE_DURATION = 300000 // 5 minutes (increased from 30 seconds to reduce API calls)
+
+// Round robin API key management
+const COINGECKO_API_KEYS = [
+  process.env.NEXT_PUBLIC_COINGECKO_API_KEY_1,
+  process.env.NEXT_PUBLIC_COINGECKO_API_KEY_2,
+  process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB' // Fallback for legacy
+].filter(Boolean)
+
+let currentKeyIndex = 0
+const keyFailureCount = new Map<string, { count: number; lastFailure: number }>()
+const KEY_FAILURE_COOLDOWN = 300000 // 5 minutes cooldown after failures
+
+const getNextApiKey = (): string => {
+  if (COINGECKO_API_KEYS.length === 0) {
+    // Fallback if no keys are configured
+    return 'CG-dbufBv4poxBTxgc181AQnsEB'
+  }
+  
+  const now = Date.now()
+  
+  // Find a key that hasn't failed recently
+  for (let i = 0; i < COINGECKO_API_KEYS.length; i++) {
+    const keyIndex = (currentKeyIndex + i) % COINGECKO_API_KEYS.length
+    const key = COINGECKO_API_KEYS[keyIndex]
+    if (!key) continue
+    
+    const failure = keyFailureCount.get(key)
+    
+    if (!failure || (now - failure.lastFailure) > KEY_FAILURE_COOLDOWN) {
+      currentKeyIndex = (keyIndex + 1) % COINGECKO_API_KEYS.length
+      return key
+    }
+  }
+  
+  // If all keys have failed recently, use the oldest failure
+  let oldestFailureKey = COINGECKO_API_KEYS[0] || 'CG-dbufBv4poxBTxgc181AQnsEB'
+  let oldestFailureTime = now
+  
+  for (const key of COINGECKO_API_KEYS) {
+    if (!key) continue
+    const failure = keyFailureCount.get(key)
+    if (failure && failure.lastFailure < oldestFailureTime) {
+      oldestFailureTime = failure.lastFailure
+      oldestFailureKey = key
+    }
+  }
+  
+  return oldestFailureKey
+}
+
+const recordKeyFailure = (key: string): void => {
+  const failure = keyFailureCount.get(key) || { count: 0, lastFailure: 0 }
+  failure.count += 1
+  failure.lastFailure = Date.now()
+  keyFailureCount.set(key, failure)
+  console.warn(`CoinGecko API key failure recorded (${failure.count} failures):`, key.substring(0, 8) + '...')
+}
+
+const recordKeySuccess = (key: string): void => {
+  // Reset failure count on successful request
+  keyFailureCount.delete(key)
+}
+
+// Utility function to get API key status for debugging
+export const getCoinGeckoApiStatus = () => {
+  const now = Date.now()
+  const keyStatus = COINGECKO_API_KEYS.map(key => {
+    if (!key) return null
+    const failure = keyFailureCount.get(key)
+    return {
+      key: key.substring(0, 8) + '...',
+      failures: failure?.count || 0,
+      lastFailure: failure?.lastFailure || 0,
+      isAvailable: !failure || (now - failure.lastFailure) > KEY_FAILURE_COOLDOWN,
+      cooldownRemaining: failure ? Math.max(0, KEY_FAILURE_COOLDOWN - (now - failure.lastFailure)) : 0
+    }
+  }).filter(Boolean)
+  
+  return {
+    totalKeys: COINGECKO_API_KEYS.length,
+    availableKeys: keyStatus.filter(status => status?.isAvailable).length,
+    keyStatus
+  }
+}
+
+// Preload common token prices to improve performance
+export const preloadCommonPrices = async () => {
+  const commonTokens = ['ETH', 'BTC', 'USDC', 'USDT', 'ZETA', 'LINK', 'UNI']
+  try {
+    await getTokenPrices(commonTokens)
+    console.log('Common prices preloaded')
+  } catch (error) {
+    console.warn('Failed to preload common prices:', error)
+  }
+}
+
 export const getTokenPrices = async (symbols: string[]): Promise<Record<string, number>> => {
   try {
+    const now = Date.now()
+    const priceMap: Record<string, number> = {}
+    const symbolsToFetch: string[] = []
+    
+    // Check cache first
+    for (const symbol of symbols) {
+      const cached = priceCache.get(symbol)
+      if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+        priceMap[symbol] = cached.price
+      } else {
+        symbolsToFetch.push(symbol)
+      }
+    }
+    
+    // If all prices are cached, return immediately
+    if (symbolsToFetch.length === 0) {
+      console.log('All prices loaded from cache')
+      return priceMap
+    }
+    
+    console.log(`Fetching prices for: ${symbolsToFetch.join(', ')}`)
+    
     // Create a mapping of symbol to CoinGecko ID
     const symbolToId: Record<string, string> = {
       'ETH': 'ethereum',
@@ -219,43 +340,90 @@ export const getTokenPrices = async (symbols: string[]): Promise<Record<string, 
       'ADA': 'cardano'
     };
 
-    // Get unique CoinGecko IDs for the symbols we have
-    const coinGeckoIds = [...new Set(symbols.map(symbol => 
+    // Get unique CoinGecko IDs for the symbols we need to fetch
+    const coinGeckoIds = [...new Set(symbolsToFetch.map(symbol => 
       symbolToId[symbol.toUpperCase()] || null
     ).filter(Boolean))];
 
-    if (coinGeckoIds.length === 0) return {};
+    if (coinGeckoIds.length === 0) return priceMap;
 
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd`,
-      {
-        headers: {
-          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      }
-    );
+    // Try API keys in round robin fashion
+    let lastError: Error | null = null
+    let response: Response | null = null
+    const maxAttempts = Math.max(1, COINGECKO_API_KEYS.length)
     
-    if (!response.ok) {
-      console.error('CoinGecko API error:', response.status);
-      return {};
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const apiKey = getNextApiKey()
+      
+      try {
+        console.log(`Attempting CoinGecko API call with key: ${apiKey.substring(0, 8)}...`)
+        
+        response = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd`,
+          {
+            headers: {
+              'X-CG-API-KEY': apiKey
+            },
+            signal: AbortSignal.timeout(15000) // 15 second timeout
+          }
+        )
+        
+        if (response.ok) {
+          recordKeySuccess(apiKey)
+          console.log(`CoinGecko API success with key: ${apiKey.substring(0, 8)}...`)
+          break
+        } else if (response.status === 429) {
+          // Rate limited - try next key
+          recordKeyFailure(apiKey)
+          console.warn(`Rate limited on key ${apiKey.substring(0, 8)}..., trying next key`)
+          lastError = new Error(`Rate limited: ${response.status}`)
+          response = null
+          continue
+        } else {
+          // Other error - record failure and try next key
+          recordKeyFailure(apiKey)
+          lastError = new Error(`API error: ${response.status}`)
+          response = null
+          continue
+        }
+      } catch (error) {
+        recordKeyFailure(apiKey)
+        lastError = error as Error
+        console.error(`Network error with key ${apiKey.substring(0, 8)}...:`, error)
+        continue
+      }
+    }
+    
+    if (!response || !response.ok) {
+      console.error('All CoinGecko API keys failed:', lastError?.message || 'Unknown error')
+      return priceMap // Return cached prices if all API keys fail
     }
     
     const data = await response.json();
     
-    // Convert back to symbol-based mapping
-    const priceMap: Record<string, number> = {};
-    
+    // Add fetched prices to the map and cache
     Object.entries(symbolToId).forEach(([symbol, geckoId]) => {
       if (data[geckoId]?.usd) {
-        priceMap[symbol] = data[geckoId].usd;
+        const price = data[geckoId].usd;
+        priceMap[symbol] = price;
+        // Cache the price
+        priceCache.set(symbol, { price, timestamp: now });
       }
     });
     
+    console.log(`Fetched and cached ${Object.keys(data).length} prices`);
     return priceMap;
   } catch (error) {
     console.error('Error fetching token prices:', error);
-    return {};
+    // Return empty object if no cached prices available
+    const fallbackPrices: Record<string, number> = {}
+    for (const symbol of symbols) {
+      const cached = priceCache.get(symbol)
+      if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+        fallbackPrices[symbol] = cached.price
+      }
+    }
+    return fallbackPrices;
   }
 };
 
@@ -293,19 +461,49 @@ export const getTokenData = async (symbols: string[]): Promise<Record<string, To
 
     if (coinGeckoIds.length === 0) return {};
 
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`,
-      {
-        headers: {
-          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      }
-    );
+    // Try API keys in round robin fashion
+    let lastError: Error | null = null
+    let response: Response | null = null
+    const maxAttempts = Math.max(1, COINGECKO_API_KEYS.length)
     
-    if (!response.ok) {
-      console.error('CoinGecko API error:', response.status);
-      return {};
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const apiKey = getNextApiKey()
+      
+      try {
+        response = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${coinGeckoIds.join(',')}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true`,
+          {
+            headers: {
+              'X-CG-API-KEY': apiKey
+            },
+            signal: AbortSignal.timeout(15000) // 15 second timeout
+          }
+        )
+        
+        if (response.ok) {
+          recordKeySuccess(apiKey)
+          break
+        } else if (response.status === 429) {
+          recordKeyFailure(apiKey)
+          lastError = new Error(`Rate limited: ${response.status}`)
+          response = null
+          continue
+        } else {
+          recordKeyFailure(apiKey)
+          lastError = new Error(`API error: ${response.status}`)
+          response = null
+          continue
+        }
+      } catch (error) {
+        recordKeyFailure(apiKey)
+        lastError = error as Error
+        continue
+      }
+    }
+    
+    if (!response || !response.ok) {
+      console.error('All CoinGecko API keys failed for getTokenData:', lastError?.message || 'Unknown error')
+      return {}
     }
     
     const data = await response.json();
@@ -361,18 +559,49 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
     const geckoId = symbolToId[symbol.toUpperCase()];
     if (!geckoId) return null;
 
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${geckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`,
-      {
-        headers: {
-          'X-CG-API-KEY': process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB'
-        }
-      }
-    );
+    // Try API keys in round robin fashion
+    let lastError: Error | null = null
+    let response: Response | null = null
+    const maxAttempts = Math.max(1, COINGECKO_API_KEYS.length)
     
-    if (!response.ok) {
-      console.error('CoinGecko detailed API error:', response.status);
-      return null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const apiKey = getNextApiKey()
+      
+      try {
+        response = await fetch(
+          `https://api.coingecko.com/api/v3/coins/${geckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`,
+          {
+            headers: {
+              'X-CG-API-KEY': apiKey
+            },
+            signal: AbortSignal.timeout(15000) // 15 second timeout
+          }
+        )
+        
+        if (response.ok) {
+          recordKeySuccess(apiKey)
+          break
+        } else if (response.status === 429) {
+          recordKeyFailure(apiKey)
+          lastError = new Error(`Rate limited: ${response.status}`)
+          response = null
+          continue
+        } else {
+          recordKeyFailure(apiKey)
+          lastError = new Error(`API error: ${response.status}`)
+          response = null
+          continue
+        }
+      } catch (error) {
+        recordKeyFailure(apiKey)
+        lastError = error as Error
+        continue
+      }
+    }
+    
+    if (!response || !response.ok) {
+      console.error('All CoinGecko API keys failed for getDetailedTokenInfo:', lastError?.message || 'Unknown error')
+      return null
     }
     
     const data = await response.json();

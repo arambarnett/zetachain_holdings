@@ -15,12 +15,13 @@ export default function Providers({ children }: ProvidersProps) {
       queries: {
         staleTime: 1000 * 60 * 5, // 5 minutes
         gcTime: 1000 * 60 * 10, // 10 minutes
+        refetchOnWindowFocus: false, // Prevent refetch on page navigation
       },
     },
   }))
 
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={config} reconnectOnMount={true}>
       <QueryClientProvider client={queryClient}>
         {children}
       </QueryClientProvider>

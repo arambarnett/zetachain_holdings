@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import WalletConnection from './WalletConnection'
 import SearchModal from './SearchModal'
+import ZetaPriceTicker from './ZetaPriceTicker'
 import { motion } from 'framer-motion'
 import { useChainId } from 'wagmi'
 
@@ -47,7 +48,10 @@ export default function Header() {
                 <h1 className="text-xl font-bold bg-gradient-to-r from-zeta-600 to-zeta-800 bg-clip-text text-transparent">
                   ZetaChain
                 </h1>
-                <p className="text-xs text-neutral-500 -mt-1">Holdings</p>
+                <div className="flex items-center justify-between -mt-1">
+                  <p className="text-xs text-neutral-500">Holdings</p>
+                  <ZetaPriceTicker />
+                </div>
               </div>
             </motion.div>
           </Link>
@@ -69,7 +73,7 @@ export default function Header() {
               Compare
             </Link>
             <Link href="/assets" className="text-neutral-600 hover:text-zeta-600 font-medium transition-colors duration-200">
-              DeFi Hub
+              Explore
             </Link>
             <Link href="/network" className="text-neutral-600 hover:text-zeta-600 font-medium transition-colors duration-200">
               Network Health

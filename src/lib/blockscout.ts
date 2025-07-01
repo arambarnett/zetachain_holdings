@@ -196,3 +196,202 @@ export const formatBlockTime = (seconds: number): string => {
     return `${minutes}m ${remainingSeconds.toFixed(0)}s`
   }
 }
+
+// Token search interface
+interface BlockscoutToken {
+  address: string
+  name: string
+  symbol: string
+  decimals: number
+  total_supply: string
+  type: string
+  icon_url?: string
+  exchange_rate?: string
+  holders?: string
+  circulating_market_cap?: string
+  volume_24h?: string
+}
+
+// Address token balance interface
+interface AddressTokenBalance {
+  token: BlockscoutToken
+  value: string
+  token_id?: string
+}
+
+// Search for tokens by name or symbol using Blockscout API
+export const searchTokens = async (query: string): Promise<BlockscoutToken[]> => {
+  try {
+    const response = await fetch(`${BLOCKSCOUT_BASE_URL}/api/v2/search?q=${encodeURIComponent(query)}`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      console.warn('Token search API not available')
+      return []
+    }
+
+    const data = await response.json()
+    // Filter results to only include tokens
+    const tokens = data.items?.filter((item: { type: string }) => item.type === 'token') || []
+    return tokens.map((item: { 
+      address: string; 
+      name: string; 
+      symbol: string; 
+      decimals?: number; 
+      total_supply?: string; 
+      type: string; 
+      icon_url?: string; 
+      exchange_rate?: string; 
+      holders?: string;
+      circulating_market_cap?: string;
+      volume_24h?: string;
+    }) => ({
+      address: item.address,
+      name: item.name,
+      symbol: item.symbol,
+      decimals: item.decimals || 18,
+      total_supply: item.total_supply || '0',
+      type: item.type,
+      icon_url: item.icon_url,
+      exchange_rate: item.exchange_rate,
+      holders: item.holders,
+      circulating_market_cap: item.circulating_market_cap,
+      volume_24h: item.volume_24h
+    }))
+  } catch (error) {
+    console.error('Error searching tokens:', error)
+    return []
+  }
+}
+
+// Get token balances for an address using Blockscout API
+export const getAddressTokenBalances = async (address: string): Promise<AddressTokenBalance[]> => {
+  try {
+    // Try the address as-is (supports both 0x... and zeta1... formats)
+    const response = await fetch(`${BLOCKSCOUT_BASE_URL}/api/v2/addresses/${address}/tokens`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      console.warn('Address token balances API not available')
+      return []
+    }
+
+    const data = await response.json()
+    return data.items || []
+  } catch (error) {
+    console.error('Error fetching address token balances:', error)
+    return []
+  }
+}
+
+// Get native token balance for an address
+export const getAddressNativeBalance = async (address: string): Promise<{ value: string } | null> => {
+  try {
+    // Try the address as-is (supports both 0x... and zeta1... formats)
+    const response = await fetch(`${BLOCKSCOUT_BASE_URL}/api/v2/addresses/${address}`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      console.warn('Address balance API not available')
+      return null
+    }
+
+    const data = await response.json()
+    return {
+      value: data.coin_balance || '0'
+    }
+  } catch (error) {
+    console.error('Error fetching address balance:', error)
+    return null
+  }
+}
+
+// Get detailed token information by contract address
+export const getTokenDetails = async (contractAddress: string): Promise<BlockscoutToken | null> => {
+  try {
+    const response = await fetch(`${BLOCKSCOUT_BASE_URL}/api/v2/tokens/${contractAddress}`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      console.warn('Token details API not available for', contractAddress)
+      return null
+    }
+
+    const data = await response.json()
+    return {
+      address: data.address,
+      name: data.name,
+      symbol: data.symbol,
+      decimals: data.decimals || 18,
+      total_supply: data.total_supply || '0',
+      type: data.type,
+      icon_url: data.icon_url,
+      exchange_rate: data.exchange_rate,
+      holders: data.holders,
+      circulating_market_cap: data.circulating_market_cap,
+      volume_24h: data.volume_24h
+    }
+  } catch (error) {
+    console.error('Error fetching token details:', error)
+    return null
+  }
+}
+
+// Helper function to format total supply properly
+export const formatTotalSupply = (totalSupply: string, decimals: number): string => {
+  try {
+    if (!totalSupply || totalSupply === '0') return '0'
+    
+    // Convert from smallest denomination to actual token amount
+    const supply = parseFloat(totalSupply)
+    const actualSupply = supply / Math.pow(10, decimals)
+    
+    // Format with appropriate precision
+    if (actualSupply >= 1000000000) {
+      return `${(actualSupply / 1000000000).toFixed(2)}B`
+    } else if (actualSupply >= 1000000) {
+      return `${(actualSupply / 1000000).toFixed(2)}M`
+    } else if (actualSupply >= 1000) {
+      return `${(actualSupply / 1000).toFixed(2)}K`
+    } else {
+      return actualSupply.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    }
+  } catch (error) {
+    console.error('Error formatting total supply:', error)
+    return totalSupply
+  }
+}
+
+// Validate if an address exists on ZetaChain
+export const validateAddress = async (address: string): Promise<boolean> => {
+  try {
+    // Try the address as-is first (works for both 0x... and zeta1... formats)
+    const response = await fetch(`${BLOCKSCOUT_BASE_URL}/api/v2/addresses/${address}`, {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    return response.ok
+  } catch (error) {
+    console.error('Error validating address:', error)
+    return false
+  }
+}
