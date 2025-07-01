@@ -7,7 +7,7 @@ import { TokenPrice } from '@/lib/alchemy'
 import { 
   fetchZetaTokens
 } from '@/lib/zetachain-api'
-import { formatTotalSupply } from '@/lib/blockscout'
+// import { formatTotalSupply } from '@/lib/blockscout' // Removed unused import
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import Link from 'next/link'
@@ -22,7 +22,7 @@ import {
   ArrowTopRightOnSquareIcon
 } from '@heroicons/react/24/outline'
 
-interface TopAsset extends TokenPrice {
+interface TopAsset extends Omit<TokenPrice, 'totalSupply'> {
   id: string
   name: string
   rank: number

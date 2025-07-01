@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Header from '@/components/Header'
@@ -57,7 +57,7 @@ export default function WalletPage() {
     return address.startsWith('zeta1') && address.length >= 39 && address.length <= 59
   }
 
-  const fetchWalletData = async (address: string) => {
+  const fetchWalletData = useCallback(async (address: string) => {
     setIsLoading(true)
     setError(null)
 
@@ -207,13 +207,13 @@ export default function WalletPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (walletAddress) {
       fetchWalletData(walletAddress)
     }
-  }, [walletAddress])
+  }, [walletAddress, fetchWalletData])
 
   const copyToClipboard = async (text: string) => {
     try {

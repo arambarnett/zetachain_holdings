@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { getDetailedTokenInfo } from '@/lib/alchemy'
-import { SUPPORTED_CHAINS, getChainById } from '@/config/chains'
+// import { getDetailedTokenInfo } from '@/lib/alchemy' // Removed unused import
+import { SUPPORTED_CHAINS } from '@/config/chains'
 import { searchTokens, getTokenDetails, formatTotalSupply } from '@/lib/blockscout'
 import { 
   ArrowLeftIcon,
@@ -86,7 +86,7 @@ export default function TokenDetailPage() {
   }
 
   // Fetch comprehensive token data from multiple sources
-  const fetchComprehensiveTokenData = async (contractAddress: string) => {
+  const fetchComprehensiveTokenData = useCallback(async (contractAddress: string) => {
     let tokenData = null
     let marketData = null
 
@@ -228,7 +228,7 @@ export default function TokenDetailPage() {
     }
 
     return { tokenData, marketData }
-  }
+  }, [])
 
   useEffect(() => {
     const fetchTokenInfo = async () => {
@@ -291,7 +291,7 @@ export default function TokenDetailPage() {
               marketCapRank: result.marketData.marketCapRank || null,
               allTimeHigh: result.marketData.allTimeHigh || null,
               allTimeLow: result.marketData.allTimeLow || null,
-              description: result.marketData.description || getTokenDescription(result.tokenData.symbol, result.tokenData.name),
+              description: result.marketData.description || getTokenDescription(result.tokenData.symbol),
               website: getTokenWebsite(result.tokenData.symbol),
               twitter: getTokenTwitter(result.tokenData.symbol),
               telegram: getTokenTelegram(result.tokenData.symbol),
@@ -378,7 +378,7 @@ export default function TokenDetailPage() {
           marketCapRank: marketData?.marketCapRank || null,
           allTimeHigh: marketData?.allTimeHigh || null,
           allTimeLow: marketData?.allTimeLow || null,
-          description: marketData?.description || getTokenDescription(tokenData.symbol, tokenData.name),
+          description: marketData?.description || getTokenDescription(tokenData.symbol),
           website: getTokenWebsite(tokenData.symbol),
           twitter: getTokenTwitter(tokenData.symbol),
           telegram: getTokenTelegram(tokenData.symbol),
@@ -415,10 +415,10 @@ export default function TokenDetailPage() {
     if (tokenAddress) {
       fetchTokenInfo()
     }
-  }, [tokenAddress])
+  }, [tokenAddress, fetchComprehensiveTokenData])
 
   // Helper functions to get token-specific information
-  const getTokenDescription = (symbol: string, name: string): string => {
+  const getTokenDescription = (symbol: string): string => {
     // Only return description if we have specific knowledge, otherwise return empty string
     const descriptions: Record<string, string> = {
       'ZETA': 'ZetaChain is a foundational, public blockchain that enables omnichain, generic smart contracts and messaging between any blockchain.',
@@ -781,11 +781,11 @@ export default function TokenDetailPage() {
                 {tokenInfo.description === 'Information for this token is not available from our data sources.' ? (
                   <span className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 block">
                     <strong>⚠️ Information not available</strong><br />
-                    We couldn't find market data for this token. This could be because:
+                    We couldn&apos;t find market data for this token. This could be because:
                     <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>It's a testnet token</li>
-                      <li>It's not listed on major exchanges</li>
-                      <li>It's a custom or private token</li>
+                      <li>It&apos;s a testnet token</li>
+                      <li>It&apos;s not listed on major exchanges</li>
+                      <li>It&apos;s a custom or private token</li>
                     </ul>
                   </span>
                 ) : (
