@@ -1,4 +1,5 @@
 import { getChainById } from '@/config/chains';
+import { Alchemy } from 'alchemy-sdk';
 
 interface AlchemyTokenBalance {
   contractAddress: string;
@@ -23,6 +24,11 @@ export interface TokenPrice {
   totalSupply?: number;
   circulatingSupply?: number;
 }
+
+// Initialize Alchemy SDK for Prices API
+const alchemy = new Alchemy({ 
+  apiKey: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY || 'demo'
+});
 
 const getAlchemyUrl = (chainId: number): string => {
   const chain = getChainById(chainId);
@@ -197,19 +203,27 @@ export const getTokenBalances = async (address: string, chainId: number): Promis
 const priceCache = new Map<string, { price: number; timestamp: number }>()
 const CACHE_DURATION = 300000 // 5 minutes (increased from 30 seconds to reduce API calls)
 
-// Round robin API key management
-const COINGECKO_API_KEYS = [
+// Separate API key pools for different features
+// Portfolio uses keys 1 & 2, Token pages use key 3
+const COINGECKO_PORTFOLIO_KEYS = [
   process.env.NEXT_PUBLIC_COINGECKO_API_KEY_1,
   process.env.NEXT_PUBLIC_COINGECKO_API_KEY_2,
   process.env.NEXT_PUBLIC_COINGECKO_API_KEY || 'CG-dbufBv4poxBTxgc181AQnsEB' // Fallback for legacy
 ].filter(Boolean)
 
+const COINGECKO_TOKEN_KEYS = [
+  process.env.NEXT_PUBLIC_COINGECKO_API_KEY_3
+].filter(Boolean) as string[]
+
+// Legacy: Keep for backwards compatibility
+const COINGECKO_API_KEYS = COINGECKO_PORTFOLIO_KEYS
+
 let currentKeyIndex = 0
 const keyFailureCount = new Map<string, { count: number; lastFailure: number }>()
-const KEY_FAILURE_COOLDOWN = 300000 // 5 minutes cooldown after failures
+const KEY_FAILURE_COOLDOWN = 120000 // 2 minutes cooldown after failures
 
-const getNextApiKey = (): string => {
-  if (COINGECKO_API_KEYS.length === 0) {
+const getNextApiKey = (keyPool: (string | undefined)[] = COINGECKO_API_KEYS): string => {
+  if (keyPool.length === 0) {
     // Fallback if no keys are configured
     return 'CG-dbufBv4poxBTxgc181AQnsEB'
   }
@@ -217,24 +231,24 @@ const getNextApiKey = (): string => {
   const now = Date.now()
   
   // Find a key that hasn't failed recently
-  for (let i = 0; i < COINGECKO_API_KEYS.length; i++) {
-    const keyIndex = (currentKeyIndex + i) % COINGECKO_API_KEYS.length
-    const key = COINGECKO_API_KEYS[keyIndex]
+  for (let i = 0; i < keyPool.length; i++) {
+    const keyIndex = (currentKeyIndex + i) % keyPool.length
+    const key = keyPool[keyIndex]
     if (!key) continue
     
     const failure = keyFailureCount.get(key)
     
     if (!failure || (now - failure.lastFailure) > KEY_FAILURE_COOLDOWN) {
-      currentKeyIndex = (keyIndex + 1) % COINGECKO_API_KEYS.length
+      currentKeyIndex = (keyIndex + 1) % keyPool.length
       return key
     }
   }
   
   // If all keys have failed recently, use the oldest failure
-  let oldestFailureKey = COINGECKO_API_KEYS[0] || 'CG-dbufBv4poxBTxgc181AQnsEB'
+  let oldestFailureKey = keyPool[0] || 'CG-dbufBv4poxBTxgc181AQnsEB'
   let oldestFailureTime = now
   
-  for (const key of COINGECKO_API_KEYS) {
+  for (const key of keyPool) {
     if (!key) continue
     const failure = keyFailureCount.get(key)
     if (failure && failure.lastFailure < oldestFailureTime) {
@@ -281,6 +295,31 @@ export const getCoinGeckoApiStatus = () => {
   }
 }
 
+// Dedicated function for token detail pages using separate API key pool
+export const fetchCoinGeckoData = async (url: string): Promise<Response> => {
+  console.log('COINGECKO_TOKEN_KEYS:', COINGECKO_TOKEN_KEYS)
+  const apiKey = getNextApiKey(COINGECKO_TOKEN_KEYS)
+  console.log('Using API key for token page:', apiKey.substring(0, 8) + '...')
+  
+  const response = await fetch(url, {
+    headers: {
+      'X-CG-API-KEY': apiKey
+    },
+    signal: AbortSignal.timeout(5000) // 5 second timeout
+  })
+  
+  if (!response.ok) {
+    console.error('CoinGecko API failed:', response.status, response.statusText)
+    if (response.status === 429) {
+      recordKeyFailure(apiKey)
+      throw new Error('Rate limited')
+    }
+    throw new Error(`API call failed: ${response.status}`)
+  }
+  
+  return response
+}
+
 // Preload common token prices to improve performance
 export const preloadCommonPrices = async () => {
   const commonTokens = ['ETH', 'BTC', 'USDC', 'USDT', 'ZETA', 'LINK', 'UNI']
@@ -292,7 +331,71 @@ export const preloadCommonPrices = async () => {
   }
 }
 
-export const getTokenPrices = async (symbols: string[]): Promise<Record<string, number>> => {
+// New Alchemy Prices API functions
+export const getTokenPricesFromAlchemy = async (symbols: string[]): Promise<Record<string, number>> => {
+  try {
+    const now = Date.now()
+    const priceMap: Record<string, number> = {}
+    const symbolsToFetch: string[] = []
+    
+    // Check cache first
+    for (const symbol of symbols) {
+      const cached = priceCache.get(symbol)
+      if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+        priceMap[symbol] = cached.price
+      } else {
+        symbolsToFetch.push(symbol)
+      }
+    }
+    
+    // If all prices are cached, return immediately
+    if (symbolsToFetch.length === 0) {
+      console.log('All prices loaded from cache')
+      return priceMap
+    }
+    
+    console.log(`Fetching prices from Alchemy for: ${symbolsToFetch.join(', ')}`)
+    
+    try {
+      // Use Alchemy Prices API
+      const data = await alchemy.prices.getTokenPriceBySymbol(symbolsToFetch)
+      
+      if (data?.data) {
+        data.data.forEach((tokenData: { symbol?: string; prices?: Array<{ value?: string }> }) => {
+          if (tokenData.symbol && tokenData.prices?.[0]?.value) {
+            const price = parseFloat(tokenData.prices[0].value)
+            priceMap[tokenData.symbol] = price
+            // Cache the price
+            priceCache.set(tokenData.symbol, { price, timestamp: now })
+          }
+        })
+      }
+      
+      console.log(`Fetched and cached ${Object.keys(priceMap).length - (symbols.length - symbolsToFetch.length)} prices from Alchemy`)
+      return priceMap
+      
+    } catch (alchemyError) {
+      console.warn('Alchemy Prices API failed, falling back to CoinGecko:', alchemyError)
+      // Fallback to CoinGecko
+      return await getTokenPricesFromCoinGecko(symbolsToFetch)
+    }
+    
+  } catch (error) {
+    console.error('Error fetching token prices:', error)
+    // Return cached prices if available
+    const fallbackPrices: Record<string, number> = {}
+    for (const symbol of symbols) {
+      const cached = priceCache.get(symbol)
+      if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+        fallbackPrices[symbol] = cached.price
+      }
+    }
+    return fallbackPrices
+  }
+}
+
+// Renamed original function to be explicit about CoinGecko usage
+export const getTokenPricesFromCoinGecko = async (symbols: string[]): Promise<Record<string, number>> => {
   try {
     const now = Date.now()
     const priceMap: Record<string, number> = {}
@@ -364,7 +467,7 @@ export const getTokenPrices = async (symbols: string[]): Promise<Record<string, 
             headers: {
               'X-CG-API-KEY': apiKey
             },
-            signal: AbortSignal.timeout(15000) // 15 second timeout
+            signal: AbortSignal.timeout(5000) // 5 second timeout
           }
         )
         
@@ -427,8 +530,45 @@ export const getTokenPrices = async (symbols: string[]): Promise<Record<string, 
   }
 };
 
-// New function to get comprehensive token data including market cap, volume, and change
+// Main function - now uses Alchemy by default
+export const getTokenPrices = async (symbols: string[]): Promise<Record<string, number>> => {
+  return await getTokenPricesFromAlchemy(symbols);
+};
+
+// New function to get comprehensive token data - uses Alchemy for prices, CoinGecko for additional data
 export const getTokenData = async (symbols: string[]): Promise<Record<string, TokenPrice>> => {
+  try {
+    // Get prices from Alchemy first
+    const prices = await getTokenPricesFromAlchemy(symbols);
+    
+    // Get additional market data from CoinGecko
+    const marketData = await getTokenMarketDataFromCoinGecko(symbols);
+    
+    // Combine the data
+    const tokenDataMap: Record<string, TokenPrice> = {};
+    
+    symbols.forEach(symbol => {
+      const price = prices[symbol] || 0;
+      const market = marketData[symbol] || {};
+      
+      tokenDataMap[symbol] = {
+        symbol,
+        price,
+        marketCap: market.marketCap || 0,
+        volume24h: market.volume24h || 0,
+        change24h: market.change24h || 0
+      };
+    });
+    
+    return tokenDataMap;
+  } catch (error) {
+    console.error('Error fetching comprehensive token data:', error);
+    return {};
+  }
+};
+
+// Helper function to get market data from CoinGecko (for additional data not available in Alchemy)
+export const getTokenMarketDataFromCoinGecko = async (symbols: string[]): Promise<Record<string, { marketCap?: number; volume24h?: number; change24h?: number }>> => {
   try {
     // Create a mapping of symbol to CoinGecko ID
     const symbolToId: Record<string, string> = {
@@ -476,7 +616,7 @@ export const getTokenData = async (symbols: string[]): Promise<Record<string, To
             headers: {
               'X-CG-API-KEY': apiKey
             },
-            signal: AbortSignal.timeout(15000) // 15 second timeout
+            signal: AbortSignal.timeout(5000) // 5 second timeout
           }
         )
         
@@ -502,20 +642,18 @@ export const getTokenData = async (symbols: string[]): Promise<Record<string, To
     }
     
     if (!response || !response.ok) {
-      console.error('All CoinGecko API keys failed for getTokenData:', lastError?.message || 'Unknown error')
+      console.error('All CoinGecko API keys failed for market data:', lastError?.message || 'Unknown error')
       return {}
     }
     
     const data = await response.json();
     
-    // Convert back to symbol-based mapping with comprehensive data
-    const tokenDataMap: Record<string, TokenPrice> = {};
+    // Convert back to symbol-based mapping with market data only
+    const marketDataMap: Record<string, { marketCap?: number; volume24h?: number; change24h?: number }> = {};
     
     Object.entries(symbolToId).forEach(([symbol, geckoId]) => {
       if (data[geckoId]) {
-        tokenDataMap[symbol] = {
-          symbol,
-          price: data[geckoId].usd || 0,
+        marketDataMap[symbol] = {
           marketCap: data[geckoId].usd_market_cap || 0,
           volume24h: data[geckoId].usd_24h_vol || 0,
           change24h: data[geckoId].usd_24h_change || 0
@@ -523,15 +661,44 @@ export const getTokenData = async (symbols: string[]): Promise<Record<string, To
       }
     });
     
-    return tokenDataMap;
+    return marketDataMap;
   } catch (error) {
-    console.error('Error fetching comprehensive token data:', error);
+    console.error('Error fetching market data from CoinGecko:', error);
     return {};
   }
 };
 
-// Function to get detailed token information including supply data
+// Function to get detailed token information - uses Alchemy for price, CoinGecko for detailed market data
 export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice | null> => {
+  try {
+    // Get price from Alchemy
+    const priceData = await getTokenPricesFromAlchemy([symbol]);
+    const price = priceData[symbol] || 0;
+    
+    // Get detailed market data from CoinGecko
+    const detailedData = await getDetailedTokenInfoFromCoinGecko(symbol);
+    
+    if (!detailedData && price === 0) {
+      return null;
+    }
+    
+    return {
+      symbol,
+      price, // Use Alchemy price
+      marketCap: detailedData?.marketCap || 0,
+      volume24h: detailedData?.volume24h || 0,
+      change24h: detailedData?.change24h || 0,
+      totalSupply: detailedData?.totalSupply || 0,
+      circulatingSupply: detailedData?.circulatingSupply || 0
+    };
+  } catch (error) {
+    console.error('Error fetching detailed token info:', error);
+    return null;
+  }
+};
+
+// Helper function to get detailed market data from CoinGecko
+export const getDetailedTokenInfoFromCoinGecko = async (symbol: string): Promise<TokenPrice | null> => {
   try {
     const symbolToId: Record<string, string> = {
       'ETH': 'ethereum',
@@ -574,7 +741,7 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
             headers: {
               'X-CG-API-KEY': apiKey
             },
-            signal: AbortSignal.timeout(15000) // 15 second timeout
+            signal: AbortSignal.timeout(5000) // 5 second timeout
           }
         )
         
@@ -600,7 +767,7 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
     }
     
     if (!response || !response.ok) {
-      console.error('All CoinGecko API keys failed for getDetailedTokenInfo:', lastError?.message || 'Unknown error')
+      console.error('All CoinGecko API keys failed for detailed token info:', lastError?.message || 'Unknown error')
       return null
     }
     
@@ -608,7 +775,7 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
     
     return {
       symbol,
-      price: data.market_data?.current_price?.usd || 0,
+      price: data.market_data?.current_price?.usd || 0, // This will be overridden by Alchemy price
       marketCap: data.market_data?.market_cap?.usd || 0,
       volume24h: data.market_data?.total_volume?.usd || 0,
       change24h: data.market_data?.price_change_percentage_24h || 0,
@@ -616,7 +783,7 @@ export const getDetailedTokenInfo = async (symbol: string): Promise<TokenPrice |
       circulatingSupply: data.market_data?.circulating_supply || 0
     };
   } catch (error) {
-    console.error('Error fetching detailed token info:', error);
+    console.error('Error fetching detailed token info from CoinGecko:', error);
     return null;
   }
 };

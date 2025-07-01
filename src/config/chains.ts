@@ -39,7 +39,7 @@ export const ALL_CHAINS: ChainConfig[] = [
     gradient: { from: 'from-blue-500', to: 'to-blue-600' },
     color: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
     isMainnet: true,
-    isSupported: true,
+    isSupported: false,
     supportedBy: 'alchemy',
     category: 'ethereum'
   },

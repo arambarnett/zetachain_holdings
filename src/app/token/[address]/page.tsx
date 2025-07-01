@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-// import { getDetailedTokenInfo } from '@/lib/alchemy' // Removed unused import
+import { fetchCoinGeckoData, getDetailedTokenInfo } from '@/lib/alchemy'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { searchTokens, getTokenDetails, formatTotalSupply } from '@/lib/blockscout'
 import { 
@@ -87,18 +87,49 @@ export default function TokenDetailPage() {
 
   // Fetch comprehensive token data from multiple sources
   const fetchComprehensiveTokenData = useCallback(async (contractAddress: string) => {
-    let tokenData = null
-    let marketData = null
-
     // First check if we have a canonical mapping for this address
     const canonicalInfo = getCanonicalTokenInfo(contractAddress)
 
+    if (canonicalInfo?.symbol) {
+      try {
+        // Use our new Alchemy-first approach for all tokens
+        const detailedTokenInfo = await getDetailedTokenInfo(canonicalInfo.symbol)
+        
+        if (detailedTokenInfo) {
+          return {
+            tokenData: {
+              name: canonicalInfo.name,
+              symbol: canonicalInfo.symbol,
+              decimals: 18 // Default, will be overridden if we can get it from blockchain
+            },
+            marketData: {
+              price: detailedTokenInfo.price || 0,
+              change24h: detailedTokenInfo.change24h || 0,
+              volume24h: detailedTokenInfo.volume24h || 0,
+              marketCap: detailedTokenInfo.marketCap || 0,
+              marketCapRank: null, // Will be filled from CoinGecko if available
+              allTimeHigh: null, // Will be filled from CoinGecko if available
+              allTimeLow: null, // Will be filled from CoinGecko if available
+              totalSupply: detailedTokenInfo.totalSupply?.toString() || null,
+              description: null,
+              logo: null
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching ${canonicalInfo.symbol} from Alchemy:`, error)
+      }
+    }
+
+    // Fallback to CoinGecko if Alchemy didn't provide data
     if (canonicalInfo?.coingeckoId) {
       try {
         // Fetch from CoinGecko using the coin ID
-        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${canonicalInfo.coingeckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`)
+        const response = await fetchCoinGeckoData(`https://api.coingecko.com/api/v3/coins/${canonicalInfo.coingeckoId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`)
         if (response.ok) {
           const data = await response.json()
+          
+          // Use CoinGecko as primary source
           return {
             tokenData: {
               name: canonicalInfo.name,
@@ -127,25 +158,27 @@ export default function TokenDetailPage() {
     // Try to get token info from CoinGecko by contract address (mainnet only)
     const addressToTry = canonicalInfo?.mainnetAddress || contractAddress
     try {
-      const response = await fetch(`https://api.coingecko.com/api/v3/coins/ethereum/contract/${addressToTry}`)
+      const response = await fetchCoinGeckoData(`https://api.coingecko.com/api/v3/coins/ethereum/contract/${addressToTry}`)
       if (response.ok) {
         const data = await response.json()
-        marketData = {
-          price: data.market_data?.current_price?.usd || 0,
-          change24h: data.market_data?.price_change_percentage_24h || 0,
-          volume24h: data.market_data?.total_volume?.usd || 0,
-          marketCap: data.market_data?.market_cap?.usd || 0,
-          marketCapRank: data.market_cap_rank || null,
-          allTimeHigh: data.market_data?.ath?.usd || null,
-          allTimeLow: data.market_data?.atl?.usd || null,
-          totalSupply: data.market_data?.total_supply?.toString() || null,
-          description: data.description?.en || null,
-          logo: data.image?.large
-        }
-        tokenData = {
-          name: data.name,
-          symbol: data.symbol?.toUpperCase(),
-          decimals: data.detail_platforms?.ethereum?.decimal_place || 18
+        return {
+          tokenData: {
+            name: data.name,
+            symbol: data.symbol?.toUpperCase(),
+            decimals: data.detail_platforms?.ethereum?.decimal_place || 18
+          },
+          marketData: {
+            price: data.market_data?.current_price?.usd || 0,
+            change24h: data.market_data?.price_change_percentage_24h || 0,
+            volume24h: data.market_data?.total_volume?.usd || 0,
+            marketCap: data.market_data?.market_cap?.usd || 0,
+            marketCapRank: data.market_cap_rank || null,
+            allTimeHigh: data.market_data?.ath?.usd || null,
+            allTimeLow: data.market_data?.atl?.usd || null,
+            totalSupply: data.market_data?.total_supply?.toString() || null,
+            description: data.description?.en || null,
+            logo: data.image?.large
+          }
         }
       }
     } catch (error) {
@@ -153,7 +186,7 @@ export default function TokenDetailPage() {
     }
 
     // If CoinGecko failed, try Blockscout with enhanced data
-    if (!tokenData && contractAddress !== '0x0000000000000000000000000000000000000000') {
+    if (contractAddress !== '0x0000000000000000000000000000000000000000') {
       try {
         // First try to get detailed token information
         let token = await getTokenDetails(contractAddress)
@@ -167,29 +200,30 @@ export default function TokenDetailPage() {
         }
         
         if (token) {
-          tokenData = {
-            name: token.name,
-            symbol: token.symbol,
-            decimals: token.decimals
-          }
-          
           // Parse and format Blockscout data properly
           const price = parseFloat(token.exchange_rate || '0')
           const marketCap = parseFloat(token.circulating_market_cap || '0')
           const volume24h = parseFloat(token.volume_24h || '0')
           const formattedTotalSupply = formatTotalSupply(token.total_supply, token.decimals)
           
-          marketData = {
-            price: isNaN(price) ? 0 : price,
-            change24h: 0, // Not available in Blockscout
-            volume24h: isNaN(volume24h) ? 0 : volume24h,
-            marketCap: isNaN(marketCap) ? 0 : marketCap,
-            marketCapRank: null,
-            allTimeHigh: null,
-            allTimeLow: null,
-            totalSupply: formattedTotalSupply || null,
-            description: null,
-            logo: token.icon_url
+          return {
+            tokenData: {
+              name: token.name,
+              symbol: token.symbol,
+              decimals: token.decimals
+            },
+            marketData: {
+              price: isNaN(price) ? 0 : price,
+              change24h: 0, // Not available in Blockscout
+              volume24h: isNaN(volume24h) ? 0 : volume24h,
+              marketCap: isNaN(marketCap) ? 0 : marketCap,
+              marketCapRank: null,
+              allTimeHigh: null,
+              allTimeLow: null,
+              totalSupply: formattedTotalSupply || null,
+              description: null,
+              logo: token.icon_url
+            }
           }
         }
       } catch (error) {
@@ -197,37 +231,37 @@ export default function TokenDetailPage() {
       }
     }
 
-    // Try blockchain metadata as fallback
-    if (!tokenData) {
-      for (const chain of SUPPORTED_CHAINS) {
-        if (chain.supportedBy === 'alchemy') {
-          try {
-            const response = await fetch(chain.rpcUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'alchemy_getTokenMetadata',
-                params: [contractAddress],
-                id: 1
-              })
+    // Try blockchain metadata as final fallback
+    for (const chain of SUPPORTED_CHAINS) {
+      if (chain.supportedBy === 'alchemy') {
+        try {
+          const response = await fetch(chain.rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'alchemy_getTokenMetadata',
+              params: [contractAddress],
+              id: 1
             })
+          })
 
-            if (response.ok) {
-              const data = await response.json()
-              if (data.result && data.result.name) {
-                tokenData = data.result
-                break
+          if (response.ok) {
+            const data = await response.json()
+            if (data.result && data.result.name) {
+              return {
+                tokenData: data.result,
+                marketData: null
               }
             }
-          } catch (error) {
-            console.error('Error fetching token metadata:', error)
           }
+        } catch (error) {
+          console.error('Error fetching token metadata:', error)
         }
       }
     }
 
-    return { tokenData, marketData }
+    return { tokenData: null, marketData: null }
   }, [])
 
   useEffect(() => {
@@ -238,9 +272,38 @@ export default function TokenDetailPage() {
         
         // Handle ZetaChain-specific tokens first
         if (tokenAddress === '0xf091867ec603a6628ed83d274e835539d82e9cc8') {
-          // Force fetch ZETA data from CoinGecko
+          // Use Alchemy-first approach for ZETA data
           try {
-            const response = await fetch('https://api.coingecko.com/api/v3/coins/zetachain?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false')
+            const detailedTokenInfo = await getDetailedTokenInfo('ZETA')
+            if (detailedTokenInfo) {
+              setTokenInfo({
+                address: '0xf091867ec603a6628ed83d274e835539d82e9cc8',
+                name: 'ZetaChain',
+                symbol: 'ZETA',
+                decimals: 18,
+                totalSupply: detailedTokenInfo.totalSupply?.toString() || null,
+                price: detailedTokenInfo.price || 0,
+                change24h: detailedTokenInfo.change24h || 0,
+                volume24h: detailedTokenInfo.volume24h || 0,
+                marketCap: detailedTokenInfo.marketCap || 0,
+                marketCapRank: null, // CoinGecko provides this
+                allTimeHigh: null, // CoinGecko provides this  
+                allTimeLow: null, // CoinGecko provides this
+                description: 'ZetaChain is a foundational, public blockchain that enables omnichain, generic smart contracts and messaging between any blockchain.',
+                website: 'https://www.zetachain.com',
+                twitter: 'https://twitter.com/zetablockchain',
+                telegram: 'https://t.me/zetachainofficial',
+                discord: 'https://discord.gg/zetachain'
+              })
+              return
+            }
+          } catch (error) {
+            console.error('Error fetching ZETA data from Alchemy:', error)
+          }
+          
+          // Fallback to CoinGecko if Alchemy fails
+          try {
+            const response = await fetchCoinGeckoData('https://api.coingecko.com/api/v3/coins/zetachain?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false')
             if (response.ok) {
               const data = await response.json()
               setTokenInfo({
@@ -265,7 +328,7 @@ export default function TokenDetailPage() {
               return
             }
           } catch (error) {
-            console.error('Error fetching ZETA data:', error)
+            console.error('Error fetching ZETA data from CoinGecko fallback:', error)
           }
         }
         
